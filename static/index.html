@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kalshi Live Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans relative">
+
+  <!-- Header -->
+  <header class="bg-indigo-600 text-white p-4 shadow-md">
+    <h1 class="text-2xl font-semibold text-center">Kalshi Live Dashboard</h1>
+  </header>
+
+  <main class="max-w-6xl mx-auto p-4 space-y-8">
+    <section>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700">User Data</h2>
+      <div id="user_info" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
+
+    <!-- Markets -->
+    <section>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700">Markets</h2>
+      <div id="markets" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
+
+    <!-- Positions -->
+    <section>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700">Positions</h2>
+      <div id="positions" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700">Resting Orders</h2>
+      <div id="resting_orders" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
+
+
+    <!-- Messages -->
+    <section>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700">Activity Log</h2>
+      <div id="messages" class="bg-white rounded-lg shadow p-3 h-64 overflow-y-auto text-sm"></div>
+    </section>
+
+  </main>
+
+<script>
+    let lastMessageCount = 0;
+    let firstLastMessageCountCheck = false;
+
+    async function refresh() {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+
+      const user = data.user_info || {};
+      const userInfoDiv = document.getElementById("user_info");
+
+      const centsToDollars = (value) => ((value ?? 0) / 100).toFixed(2);
+
+      userInfoDiv.innerHTML = `
+        <div class="bg-white shadow rounded-lg p-4">
+          <h3 class="text-sm font-medium text-gray-500">Balance</h3>
+          <p class="text-2xl font-semibold text-gray-800">$${centsToDollars(user.balance)}</p>
+        </div>
+
+        <div class="bg-white shadow rounded-lg p-4">
+          <h3 class="text-sm font-medium text-gray-500">Portfolio Value</h3>
+          <p class="text-2xl font-semibold text-gray-800">$${centsToDollars(user.portfolio_value)}</p>
+        </div>
+
+        <div class="bg-white shadow rounded-lg p-4">
+          <h3 class="text-sm font-medium text-gray-500">Last Updated</h3>
+          <p class="text-lg font-medium text-gray-700">
+            ${user.updated_ts ? new Date(user.updated_ts * 1000).toLocaleString() : "—"}
+          </p>
+        </div>
+      `;
+
+
+      const markets = data.markets || [];
+      const positions = data.positions || [];
+      const messages = data.messages || [];
+      if (!firstLastMessageCountCheck) {
+          lastMessageCount = messages.length;
+          firstLastMessageCountCheck = true;
+      }
+
+      const positionMap = {};
+      positions.forEach(p => {
+        positionMap[p.ticker] = {
+          net: p.net_yes_position,
+          avg: p.avg_share_price,
+          liquidation: p.liquidation_value
+        };
+      });
+
+      // ---- Markets ----
+      document.getElementById('markets').innerHTML = markets.map(m => {
+        const pos = positionMap[m.market_ticker];
+        const positionText = pos
+          ? `<span class="text-sm text-gray-500 ml-2">(${pos.net > 0 ? 'YES' : pos.net < 0 ? 'NO' : 'FLAT'} ${pos.net} @ $${Math.abs(pos.avg)} → $${pos.liquidation.toFixed(2)})</span>`
+          : `<span class="text-sm text-gray-400 ml-2">(No Position)</span>`;
+
+        return `
+          <div class="bg-white p-5 rounded-xl shadow hover:shadow-lg transition duration-200 flex flex-col justify-between">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800 mb-1 flex items-center justify-between">
+                ${m.team}
+                ${positionText}
+              </h3>
+              <p class="text-sm text-gray-500 mb-3">
+                YES ${m.yes_bid} / ${m.yes_ask} • NO ${m.no_bid} / ${m.no_ask}
+              </p>
+            </div>
+
+            <!-- YES Trades -->
+            <div class="bg-green-50 p-3 rounded-lg mb-3">
+              <h4 class="text-green-700 font-semibold text-sm mb-2">YES Trades</h4>
+              <div class="grid grid-cols-2 gap-3">
+                <button class="bg-green-500 hover:bg-green-600 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('buy','yes','${m.market_ticker}',10)">Buy 10 YES (${m.yes_ask})</button>
+                <button class="bg-red-500 hover:bg-red-600 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('sell','yes','${m.market_ticker}',10)">Sell 10 YES (${m.yes_bid})</button>
+                <button class="bg-green-500 hover:bg-green-600 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('buy','yes','${m.market_ticker}',50)">Buy 50 YES (${m.yes_ask})</button>
+                <button class="bg-red-500 hover:bg-red-600 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('sell','yes','${m.market_ticker}',50)">Sell 50 YES (${m.yes_bid})</button>
+              </div>
+            </div>
+
+            <!-- NO Trades -->
+            <div class="bg-red-50 p-3 rounded-lg">
+              <h4 class="text-red-700 font-semibold text-sm mb-2">NO Trades</h4>
+              <div class="grid grid-cols-2 gap-3">
+                <button class="bg-green-400 hover:bg-green-500 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('buy','no','${m.market_ticker}',10)">Buy 10 NO (${m.no_ask})</button>
+                <button class="bg-red-400 hover:bg-red-500 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('sell','no','${m.market_ticker}',10)">Sell 10 NO (${m.no_bid})</button>
+                <button class="bg-green-400 hover:bg-green-500 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('buy','no','${m.market_ticker}',50)">Buy 50 NO (${m.no_ask})</button>
+                <button class="bg-red-400 hover:bg-red-500 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('sell','no','${m.market_ticker}',50)">Sell 50 NO (${m.no_bid})</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+
+      // ---- Positions ----
+      document.getElementById('positions').innerHTML = positions.map(p => `
+        <div class="bg-white p-5 rounded-xl shadow hover:shadow-lg transition duration-200">
+          <h4 class="font-semibold text-indigo-700 mb-1">${p.ticker}</h4>
+          <p class="text-sm text-gray-700 mb-1">Net: <b>${p.net_yes_position}</b> @ $${p.avg_share_price}</p>
+          <p class="text-sm text-gray-700 mb-1">Liquidation: <b>$${p.liquidation_value}</b></p>
+          <p class="text-xs text-gray-400">Fees: $${p.fees_paid_dollars}</p>
+        </div>
+      `).join('');
+
+      // ---- Messages + Toasts ----
+      document.getElementById('messages').innerHTML = messages.map(m => `
+        <div class="border-l-4 pl-2 my-1 ${
+          m.type.toLowerCase() === 'error' ? 'border-red-500 text-red-600' :
+          m.type.toLowerCase() === 'trade' ? 'border-green-500 text-green-600' :
+          'border-gray-400 text-gray-600'
+        }">
+          <span class="text-xs text-gray-400">[${new Date(m.timestamp).toLocaleTimeString()}]</span>
+          <b>${m.type}</b>: ${m.text}
+        </div>
+      `).join('');
+    }
+
+    async function trade(action, side, ticker, quantity) {
+      await fetch(`/api/order/${action}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({side, ticker, quantity})
+      });
+      refresh();
+    }
+
+    setInterval(refresh, 2000);
+    refresh();
+
+    async function loadRestingOrders() {
+      const res = await fetch("/api/orders/resting");
+      const data = await res.json();
+      const container = document.getElementById("resting_orders");
+      const orders = data.resting_orders || [];
+
+      if (!orders.length) {
+        container.innerHTML = `<p class="text-gray-500">No resting orders.</p>`;
+        return;
+      }
+
+      container.innerHTML = orders.map(o => `
+        <div class="bg-white shadow rounded-lg p-4">
+          <h3 class="font-semibold text-gray-800">${o.ticker}</h3>
+          <p class="text-sm text-gray-600">${o.side} ${o.action} @ $${o.price} (${o.remaining} remaining)</p>
+          <p class="text-xs text-gray-400">Queue position: ${o.queue_position ?? "—"}</p>
+          <button onclick="cancelOrder('${o.order_id}')"
+            class="mt-2 bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs">
+            Cancel
+          </button>
+        </div>
+      `).join("");
+    }
+
+    async function cancelOrder(orderId) {
+      const res = await fetch(`/api/orders/cancel/${orderId}`, { method: "DELETE" });
+      const data = await res.json();
+      loadRestingOrders();
+    }
+
+    setInterval(loadRestingOrders, 2000);
+    loadRestingOrders();
+
+</script>
+
+
+</body>
+</html>

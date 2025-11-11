@@ -254,6 +254,82 @@ async def api_sell(request: Request):
         add_message("ERROR", f"❌ SELL {side.upper()} failed for {ticker}: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+async def sell_all_limit():
+    #Sell ALL YES and NO positions, using true limit orders.
+
+    markets = {m["market_ticker"]: m for m in (state.get("markets") or [])}
+    positions = state.get("positions") or []
+
+    results = []
+
+    for pos in positions:
+        ticker = pos["market_ticker"]
+        yes_qty = int(pos.get("yes_shares", 0))
+        no_qty = int(pos.get("no_shares", 0))
+
+        if yes_qty == 0 and no_qty == 0:
+            continue
+
+        m = markets.get(ticker)
+        if not m:
+            continue
+
+        if yes_qty > 0:
+            best_bid = m.get("yes_bid")
+            if best_bid is None:
+                continue
+
+            limit_price = int((best_bid * 100)) + 1  # 1 tick above bid, (edit later to account for 1c spreads)!
+
+            order_payload = {
+                "ticker": ticker,
+                "action": "sell",
+                "side": "yes",
+                "type": "limit",
+                "count": yes_qty,
+                "yes_price": limit_price,
+                "client_order_id": str(uuid.uuid4())
+            }
+
+            result = kalshi_post("/trade-api/v2/portfolio/orders", order_payload)
+            results.append({"ticker": ticker, "side": "YES", "qty": yes_qty, "price": limit_price, "result": result})
+
+            add_message(
+                "INFO",
+                f"📤 Passive SELL YES {ticker} x{yes_qty} @ {limit_price} (resting)",
+                ticker=ticker, side="YES", quantity=yes_qty, price=limit_price
+            )
+
+        # Sell NO shares passively
+        if no_qty > 0:
+            best_bid = m.get("no_bid")
+            if best_bid is None:
+                continue
+
+            limit_price = int((best_bid * 100)) + 1  # 1 tick above bid, (edit later to account for 1c spreads)!
+
+            order_payload = {
+                "ticker": ticker,
+                "action": "sell",
+                "side": "no",
+                "type": "limit",
+                "count": no_qty,
+                "no_price": limit_price,
+                "client_order_id": str(uuid.uuid4())
+            }
+
+            result = kalshi_post("/trade-api/v2/portfolio/orders", order_payload)
+            results.append({"ticker": ticker, "side": "NO", "qty": no_qty, "price": limit_price, "result": result})
+
+            add_message(
+                "INFO",
+                f"📤 Passive SELL NO {ticker} x{no_qty} @ {limit_price} (resting)",
+                ticker=ticker, side="NO", quantity=no_qty, price=limit_price
+            )
+
+    return results
+
+
 @app.get("/api/orders/resting")
 def api_resting_orders():
     return {"resting_orders": state.get("resting_orders", [])}

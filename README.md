@@ -1,4 +1,4 @@
-# Kalshi Positions & Trading API
+# Kalshi Position Tracker & Trading API
 
 A lightweight FastAPI service and CLI toolkit for interacting with [Kalshi](https://kalshi.com)’s trading API.  
 It supports market polling, position tracking, and order execution using Kalshi’s PSS-signed authentication flow.

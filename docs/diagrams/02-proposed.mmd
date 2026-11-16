@@ -1,0 +1,67 @@
+flowchart TB
+    Operator["Operator"] --> UI["Shared browser UI<br/>Trade / Compare / Liquidity / Portfolio<br/>Environment, mode, freshness and action status"]
+
+    subgraph app["PROPOSED — one deployable application; one active execution owner"]
+        API["FastAPI boundary<br/>Validated commands and read endpoints<br/>Local access boundary; authentication before remote use"]
+        Reads["Read views<br/>Market freshness, orders, exposure<br/>Equity, cash flows and separate reward estimates"]
+        Strategies["Arbitrage and LP strategies<br/>Produce explainable order intentions<br/>No direct exchange order writes"]
+        Domain["Pure domain logic<br/>Book reconstruction, payoff relationships<br/>Prices, fees, sizing and accounting"]
+        Data["Market-data service<br/>REST snapshots + WebSocket events<br/>Validity, timestamps and gap recovery"]
+        Executor["Execution service — sole owner of order mutations<br/>Stable intent IDs, risk reservations, order lifecycle<br/>Submit / cancel / replace / pause"]
+        Policy["Admission and risk policy<br/>Explicit arming, valid data, budget, ownership<br/>Cancel / recovery actions have their own policy"]
+        Recovery["Reconciliation service<br/>Compare journal with exchange orders, fills, positions<br/>Unresolved outcomes retain exposure reservations"]
+        Runtime["Lifecycle supervisor<br/>Single-instance guard, startup checks<br/>Task health, pause and bounded shutdown"]
+        Portfolio["Portfolio and reward analytics<br/>Facts and estimates kept separate"]
+        Broker["Broker interface<br/>Order origin selects adapter<br/>environment + mode + account + session"]
+        Kalshi["Kalshi adapter<br/>REST reads and order writes; WebSocket input<br/>Signing, timeouts, rate budget, normalized errors"]
+        Sim["Simulation adapter<br/>Isolated order / fill state<br/>Deterministic clock and explicit fill assumptions"]
+        Store["Storage adapter<br/>Transactions, unique fill IDs<br/>Order / fill history and checkpoints"]
+    end
+
+    DB[("SQLite on a persistent local volume<br/>Environment / mode / account scoped records")]
+    Exchange["Kalshi REST + WebSocket APIs<br/>Demo or production account"]
+    Secrets["Runtime configuration and private key<br/>Outside Git and container images"]
+    Fixtures["Synthetic or sanitized replay fixtures<br/>Offline demo and fault injection"]
+
+    UI <-->|HTTP polling and commands| API
+    API -->|queries| Reads
+    API -->|manual trades, controls, strategy configuration| Executor
+    API -->|read-only analysis| Portfolio
+    Executor -->|validated configuration| Strategies
+    Data -->|valid snapshots| Domain
+    Domain -->|candidate decisions| Strategies
+    Strategies -->|intentions| Executor
+    Executor -->|check before new exposure| Policy
+    Data -->|freshness and prices| Policy
+    Reads -->|known and reserved exposure| Policy
+    Executor -->|all submit / cancel / replace writes| Broker
+    Executor <--> Store
+    Store --> Reads
+    Data --> Reads
+    Portfolio --> Reads
+    Domain --> Portfolio
+    Store --> Portfolio
+    Recovery -->|normalized facts for serialized application| Executor
+    Recovery -->|read-only exchange reconciliation| Kalshi
+    Recovery <--> Store
+    Runtime -->|start / monitor / pause| Data & Executor & Recovery
+    Broker -->|live orders, demo or production| Kalshi
+    Broker -->|simulated orders| Sim
+    Kalshi <-->|bounded network I/O| Exchange
+    Kalshi -->|market events| Data
+    Kalshi -->|private order / fill events| Executor
+    Secrets --> Kalshi
+    Fixtures --> Data & Sim
+    Sim -->|simulated order / fill events| Executor
+    Store <--> DB
+
+    classDef ui fill:#eaf0ff,stroke:#4f6bdc,color:#172554
+    classDef service fill:#eff8f6,stroke:#278579,color:#143e38
+    classDef execution fill:#e1f3ee,stroke:#17705c,stroke-width:3px,color:#123e31
+    classDef data fill:#fff5de,stroke:#b68a22,color:#583f0d
+    classDef external fill:#f0f1f5,stroke:#737b8b,color:#242d3b
+    class Operator,UI,API,Reads ui
+    class Strategies,Domain,Data,Policy,Recovery,Runtime,Portfolio service
+    class Executor execution
+    class Store,DB data
+    class Broker,Kalshi,Sim,Exchange,Secrets,Fixtures external

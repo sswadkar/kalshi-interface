@@ -1,0 +1,29 @@
+flowchart TB
+    Boot["Start application"] --> Guard{"Exclusive local instance guard acquired?"}
+    Guard -->|no| Refuse["Refuse second trading instance<br/>No background trading loops"]
+    Guard -->|yes| Init["Validate config and storage<br/>Start with live submission disabled"]
+    Init --> Recover["Reconcile durable state<br/>Paginated orders and fills, account positions<br/>Resolve existing intents and reservations"]
+    Recover --> Matched{"State consistent and outcomes resolved?"}
+    Matched -->|no| Degraded["DEGRADED<br/>Read visibility where available<br/>Cancel / reconcile remain available<br/>New exposure blocked"]
+    Degraded -->|repair or retry with bounded backoff| Recover
+    Matched -->|yes| Sync["Start and verify data feeds<br/>Fresh snapshots; valid stream sequence<br/>Required tasks healthy"]
+    Sync --> Ready["READY<br/>Dashboard and analysis available<br/>Live trading remains disarmed"]
+    Ready -->|operator arms a specific account and strategy| Active["ACTIVE<br/>All new exposure passes execution policy"]
+    Active -->|stale data, disconnect, task failure, limit breach or stop| Pause["PAUSED<br/>Latch submission gate<br/>Track in-flight requests and existing orders"]
+    Pause -->|reconcile and rebuild valid data| Recover
+    Active -->|shutdown requested| Stop["STOPPING<br/>Block new submissions<br/>Cancel owned orders and reconcile in-flight requests"]
+    Ready -->|shutdown requested| Stop
+    Pause -->|shutdown requested| Stop
+    Stop --> Outcome{"All order outcomes confirmed within deadline?"}
+    Outcome -->|yes| Clean["Persist final state and exit"]
+    Outcome -->|no| Unresolved["Persist unresolved state and exit with warning<br/>Exchange orders may remain live<br/>Next startup must reconcile"]
+    Tests["Offline mode uses synthetic data and simulated broker<br/>Same lifecycle and execution policy; no credentials"] -.-> Init
+
+    classDef ready fill:#eaf0ff,stroke:#4f6bdc,color:#172554
+    classDef good fill:#eff8f6,stroke:#278579,color:#143e38
+    classDef caution fill:#fff5de,stroke:#b68a22,color:#583f0d
+    classDef stop fill:#fff0ef,stroke:#c55a51,color:#6d2621
+    class Boot,Init,Sync,Ready,Tests ready
+    class Recover,Active,Clean good
+    class Guard,Matched,Outcome,Pause,Stop caution
+    class Refuse,Degraded,Unresolved stop

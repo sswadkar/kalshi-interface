@@ -1,0 +1,58 @@
+sequenceDiagram
+    autonumber
+    participant U as UI or strategy
+    participant A as Command boundary
+    participant E as Execution owner
+    participant J as Durable journal
+    participant P as Risk and mode policy
+    participant B as Origin-specific broker
+    participant R as Reconciliation
+
+    U->>A: Submit intention with stable request ID
+    A->>A: Validate schema, units, ownership and account context
+    A->>E: Validated command
+    E->>J: Insert intention if absent (unique request ID)
+    J-->>E: New record or existing result
+    alt Request already recorded
+        E-->>U: Existing order status with no duplicate submission
+    else New intention
+        E->>P: Recheck arming, freshness and available exposure
+        alt Admission denied
+            E->>J: Persist rejection and reason
+            E-->>U: Blocked with an actionable reason
+        else Admission allowed
+            E->>J: Commit reservation and SUBMITTING with stable client order ID
+            Note over E,J: Transaction finishes before network I/O
+            E->>B: Submit using persisted identity and origin
+            alt Confirmed response
+                B-->>E: Exchange ID, outcome and cumulative fill information
+                E->>J: Persist normalized order state
+                E-->>U: Confirmed current status
+            else Timeout or ambiguous transport failure
+                E->>J: Mark UNKNOWN and retain reserved exposure
+                E-->>U: Outcome unresolved and reconciliation required
+                E->>R: Resolve the existing intention
+                R->>B: Read orders, fills and positions
+                B-->>R: Exchange facts
+                R->>E: Reconciled outcome or still unresolved
+                E->>J: Apply evidence and keep unresolved reservations
+                Note over E,B: No blind resubmission after an unknown outcome
+            end
+        end
+    end
+
+    Note over E,B: Private fills may arrive before or after the HTTP response
+    B-->>E: Canonical fill or replayed fill event
+    E->>J: Insert unique fill and update projections in one transaction
+    Note over E,J: Duplicate fill IDs do not change inventory twice
+
+    opt Operator stops a strategy
+        U->>A: Stop quoting and cancel owned orders
+        A->>E: Latch pause before further new submissions
+        E->>J: Persist paused state and cancellation intentions
+        E->>B: Cancel each real order using its stored origin
+        B-->>E: Confirmed outcome, failure or timeout
+        E->>J: Retain unresolved orders and reservations
+        E-->>U: Quoting stopped with canceled / remaining / unresolved counts
+        Note over E,B: Simulation settings never erase obligations for existing live orders
+    end

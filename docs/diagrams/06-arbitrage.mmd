@@ -1,0 +1,26 @@
+flowchart TB
+    Group["User selects related markets"] --> Relation{"Supported and reviewed<br/>settlement relationship?"}
+    Relation -->|no| Compare["Comparison only<br/>No arbitrage label or automated execution"]
+    Relation -->|yes| Payoff["Compute minimum combined payout<br/>Across all permitted settlement outcomes"]
+    Payoff --> Fresh{"Fresh, valid prices and depth?"}
+    Fresh -->|no| Block["Explain why the candidate is blocked"]
+    Fresh -->|yes| Cost["Compute executable cost at chosen limit prices<br/>Quantity, fees, rounding and buffers included"]
+    Cost --> Edge{"Minimum payout minus bounded cost<br/>meets configured threshold?"}
+    Edge -->|no| Block
+    Edge -->|yes| Plan["Persist paired execution plan<br/>Reserve exposure for both legs<br/>Set unmatched-exposure and time limits"]
+    Plan --> First["Submit first leg through execution service"]
+    First --> Result{"Confirmed first-leg outcome?"}
+    Result -->|rejected or zero fill| Halt["Stop plan; release only confirmed unused reservation"]
+    Result -->|unknown| Reconcile["Pause plan and reconcile<br/>Retain reservation; no blind retries"]
+    Result -->|confirmed fill| Second["Size second leg to confirmed matched quantity<br/>Recheck price limits, validity and exposure policy"]
+    Second --> Match{"Matched fill quantity confirmed?"}
+    Match -->|yes| Complete["Record actual costs, fees and matched quantity<br/>Report settlement-dependent payout and remaining exposure"]
+    Match -->|no or unknown| Exposed["Record unmatched exposure<br/>Pause strategy and reconcile<br/>Apply only a pre-authorized bounded recovery policy"]
+    Note["This is coordinated execution, not a cross-market atomic transaction.<br/>Grouping, concurrent submission or single-order FOK cannot prove pair atomicity."] -.-> Plan
+
+    classDef good fill:#eff8f6,stroke:#278579,color:#143e38
+    classDef caution fill:#fff5de,stroke:#b68a22,color:#583f0d
+    classDef blocked fill:#fff0ef,stroke:#c55a51,color:#6d2621
+    class Group,Payoff,Cost,Plan,First,Second,Complete good
+    class Relation,Fresh,Edge,Result,Match,Note caution
+    class Compare,Block,Halt,Reconcile,Exposed blocked

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance — Kalshi</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root { --bg:#0e1117; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --mut:#8b949e;
+          --grn:#2ea043; --grn-bar:#238636; --red:#f85149; --red-bar:#a5302c; --amb:#d29922;
+          --blu:#388bfd; --blu-soft:rgba(56,139,253,.12); --grid:#21262d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--border); }
+  header h1 { font-size:16px; margin:0; }
+  header a { color:var(--mut); text-decoration:none; margin-right:12px; }
+  header a:hover { color:var(--fg); }
+  .wrap { padding:20px; max-width:1300px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:26px 28px; }
+  .head { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap; padding-bottom:20px; border-bottom:1px solid var(--border); margin-bottom:22px; }
+  .eyebrow { font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); margin:0 0 7px; font-weight:500; }
+  .hero { font-size:54px; font-weight:700; line-height:.95; margin:0; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+  .gain { font-size:18px; font-weight:600; margin:0 0 4px; font-variant-numeric:tabular-nums; }
+  .meta { font-size:12px; color:var(--mut); margin:0; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-bottom:28px; }
+  .stat { background:var(--panel); padding:14px 16px; }
+  .stat .v { font-size:20px; font-weight:600; margin:0; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  .stat .v small { font-size:12px; color:var(--mut); font-weight:400; }
+  .grid { display:grid; grid-template-columns:minmax(0,1fr) 230px; gap:32px; align-items:start; }
+  .sect { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .sect h2 { font-size:13px; font-weight:600; margin:0; }
+  .chart { position:relative; width:100%; height:440px; }
+  .deltas { max-height:474px; overflow-y:auto; font-variant-numeric:tabular-nums; padding-right:4px; }
+  .deltas::-webkit-scrollbar { width:6px; } .deltas::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  .row { display:flex; align-items:center; gap:10px; padding:7px 2px; border-bottom:1px solid var(--grid); }
+  .row:last-child { border-bottom:none; }
+  .row .d { font-size:11px; color:var(--mut); width:38px; flex:none; }
+  .row .track { flex:1; display:flex; min-width:0; }
+  .row .bar { height:5px; border-radius:3px; }
+  .row .amt { width:66px; text-align:right; flex:none; font-size:12.5px; font-weight:600; }
+  .foot { margin-top:22px; padding-top:15px; border-top:1px solid var(--border); font-size:12px; color:var(--mut); }
+  .mut { color:var(--mut); }
+  .empty { color:var(--mut); text-align:center; padding:60px 20px; }
+  .adjust { margin-top:14px; display:flex; gap:18px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--mut); }
+  .adjust input { background:#0d1117; border:1px solid var(--border); color:var(--fg); border-radius:5px; padding:4px 7px; width:92px; font-size:12px; }
+  .adjust button { background:var(--blu); color:#fff; border:none; padding:4px 10px; border-radius:5px; cursor:pointer; font-size:12px; }
+  @media (max-width:760px){ .wrap{padding:14px;} .panel{padding:20px 18px;} .grid{grid-template-columns:1fr; gap:26px;} .hero{font-size:42px;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>📈 Performance</h1>
+  <nav>
+    <a href="/">Dashboard</a><a href="/arbitrage">Arbitrage</a>
+    <a href="/liquidity">Liquidity</a><a href="/performance" style="color:var(--fg)">Performance</a>
+  </nav>
+</header>
+<div class="wrap">
+  <div class="panel">
+    <div class="head">
+      <div><p class="eyebrow">Total value · equity + cash + pending LP rewards</p><p class="hero" id="hero">—</p></div>
+      <div style="text-align:right"><p class="gain" id="gain">—</p><p class="meta" id="range">—</p></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><p class="eyebrow">Pending LP rewards</p><p class="v" id="pending" style="color:var(--amb)">—</p></div>
+      <div class="stat"><p class="eyebrow">Lifetime LP rewards</p><p class="v" id="lp" style="color:var(--grn)">—</p></div>
+      <div class="stat"><p class="eyebrow">Up day record</p><p class="v" id="updays">—</p></div>
+      <div class="stat"><p class="eyebrow">Best day</p><p class="v" id="best">—</p></div>
+      <div class="stat"><p class="eyebrow">Worst day</p><p class="v" id="worst">—</p></div>
+      <div class="stat"><p class="eyebrow">Max drawdown</p><p class="v" id="dd">—</p></div>
+      <div class="stat"><p class="eyebrow">Avg day</p><p class="v" id="avgup">—</p></div>
+    </div>
+    <div class="grid">
+      <div>
+        <div class="sect"><h2>Equity curve</h2><span class="mut" id="curveNote"></span></div>
+        <div class="chart"><canvas id="chart"></canvas></div>
+      </div>
+      <div>
+        <div class="sect"><h2>Daily change</h2></div>
+        <div class="deltas" id="deltas"></div>
+      </div>
+    </div>
+    <p class="foot" id="foot">—</p>
+    <div class="adjust">
+      <span>Adjust:</span>
+      <span>Pending rewards $ <input id="setPending" type="number" step="0.01"> <button onclick="setVal('pending','setPending')">set</button></span>
+      <span>Lifetime rewards $ <input id="setLifetime" type="number" step="0.01"> <button onclick="setVal('baseline','setLifetime')">set</button></span>
+      <span class="mut">— reset pending after a payout lands in cash</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const cs = getComputedStyle(document.documentElement);
+const v = n => cs.getPropertyValue(n).trim();
+const money = n => '$' + Math.round(n).toLocaleString();
+const signed = n => (n >= 0 ? '+' : '−') + '$' + Math.abs(Math.round(n)).toLocaleString();
+let chart;
+
+async function load(){
+  let j;
+  try { j = await (await fetch('/api/portfolio/history')).json(); }
+  catch(e){ document.getElementById('hero').textContent = '⚠️ offline'; return; }
+
+  const DATA = (j.days||[]).map(d => [d.date, d.value]);
+  document.getElementById('lp').textContent = money(j.lp_lifetime||0);
+  document.getElementById('pending').textContent = money(j.pending_lp||0);
+
+  if (DATA.length === 0) return;
+  const last = DATA[DATA.length-1][1];
+  document.getElementById('hero').textContent = money(last);
+
+  if (DATA.length < 2){
+    document.getElementById('gain').textContent = '—';
+    document.getElementById('range').textContent = 'Daily history builds over time · 1 session so far';
+    document.getElementById('curveNote').textContent = 'collecting daily points…';
+    ['updays','best','worst','dd','avgup'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('foot').textContent = 'One data point so far — the curve fills in a point per day as the server runs.';
+    drawChart(DATA);
+    return;
+  }
+
+  const first = DATA[0][1], total = last - first, pct = (total/first)*100;
+  const deltas = [];
+  for (let i = DATA.length-1; i > 0; i--) deltas.push([DATA[i][0], DATA[i][1] - DATA[i-1][1]]);
+  const vals = deltas.map(d=>d[1]), ups = vals.filter(x=>x>0), downs = vals.filter(x=>x<0);
+
+  let peak = first, ddAbs = 0, ddPct = 0;
+  for (const [,val] of DATA){ if(val>peak) peak=val; const d=peak-val; if(d>ddAbs){ddAbs=d; ddPct=d/peak*100;} }
+
+  const g = document.getElementById('gain');
+  g.textContent = signed(total) + '  ·  ' + (pct>=0?'+':'−') + Math.abs(pct).toFixed(1) + '%';
+  g.style.color = total>=0 ? v('--grn') : v('--red');
+  document.getElementById('range').textContent = DATA[0][0] + ' – ' + DATA[DATA.length-1][0] + ' · ' + deltas.length + ' sessions';
+  const ud = document.getElementById('updays');
+  ud.textContent = ups.length + '–' + downs.length;
+  const udRatio = downs.length ? ups.length / downs.length : Infinity;
+  ud.style.color = udRatio > 1.5 ? v('--grn') : (udRatio >= 1 ? v('--fg') : v('--red'));
+  const best = document.getElementById('best'); best.textContent = signed(Math.max(...vals)); best.style.color = v('--grn');
+  const worst = document.getElementById('worst'); worst.textContent = signed(Math.min(...vals)); worst.style.color = v('--red');
+  document.getElementById('dd').textContent = '−' + ddPct.toFixed(1) + '%';
+  const avg = document.getElementById('avgup');
+  const avgVal = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+  avg.textContent = vals.length ? signed(avgVal) : '—';
+  avg.style.color = avgVal >= 0 ? v('--grn') : v('--red');
+  document.getElementById('curveNote').textContent = '';
+  document.getElementById('foot').textContent =
+    'Peak-to-trough drawdown of ' + money(ddAbs) + ' (' + ddPct.toFixed(1) + '%).'
+    + (downs.length ? ' Worst session was ' + Math.round(Math.abs(Math.min(...vals))/Math.abs(downs.reduce((a,b)=>a+b,0))*100) + '% of all down-day losses.' : '');
+
+  const maxAbs = Math.max(...vals.map(Math.abs), 1);
+  document.getElementById('deltas').innerHTML = deltas.map(([d,val])=>{
+    const up = val>=0, col = up?v('--grn'):v('--red'), bar = up?v('--grn-bar'):v('--red-bar');
+    const w = Math.max(2, Math.round(Math.abs(val)/maxAbs*80));
+    return '<div class="row"><span class="d">'+d+'</span>'
+         + '<span class="track"><span class="bar" style="width:'+w+'%;background:'+bar+'"></span></span>'
+         + '<span class="amt" style="color:'+col+'">'+signed(val)+'</span></div>';
+  }).join('');
+
+  drawChart(DATA);
+}
+
+function drawChart(DATA){
+  const ys = DATA.map(d=>d[1]);
+  const lo = Math.floor((Math.min(...ys)*0.96)/50)*50, hi = Math.ceil((Math.max(...ys)*1.04)/50)*50;
+  const cfg = {
+    type:'line',
+    data:{ labels: DATA.map(d=>d[0]), datasets:[{
+      data: ys, borderColor: v('--blu'), borderWidth: 2,
+      backgroundColor: v('--blu-soft'), fill:true, tension:0.2,
+      pointRadius: DATA.length<=1 ? 4 : 0, pointHoverRadius: 5, pointHitRadius: 16,
+      pointBackgroundColor: v('--blu')
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:false, layout:{padding:{top:8,right:4}},
+      interaction:{mode:'index', intersect:false},
+      plugins:{ legend:{display:false},
+        tooltip:{ backgroundColor:'#0d1117', titleColor:v('--fg'), bodyColor:v('--mut'),
+          borderColor:v('--border'), borderWidth:1, padding:10, cornerRadius:7, displayColors:false,
+          callbacks:{ label:c=>money(c.parsed.y) } } },
+      scales:{
+        y:{ min:lo, max:hi, border:{display:false}, grid:{color:v('--grid')},
+            ticks:{ color:v('--mut'), font:{size:11}, padding:10, callback:n=>'$'+(n/1000).toFixed(1)+'k' } },
+        x:{ border:{display:false}, grid:{display:false},
+            ticks:{ color:v('--mut'), font:{size:11}, padding:8, autoSkip:true, maxTicksLimit:18, maxRotation:0 } }
+      }
+    }
+  };
+  if (chart){ chart.data = cfg.data; chart.options = cfg.options; chart.update(); }
+  else chart = new Chart(document.getElementById('chart'), cfg);
+}
+
+async function setVal(endpoint, inputId){
+  const val = parseFloat(document.getElementById(inputId).value);
+  if (isNaN(val)) return;
+  await fetch('/api/lp/rewards/'+endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:val})});
+  document.getElementById(inputId).value = '';
+  load();
+}
+
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

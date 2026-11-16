@@ -2,7 +2,7 @@
 FROM python:3.11-slim
 
 # Create and set working directory
-WORKDIR /
+WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -14,11 +14,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code
-COPY . .
+COPY pyproject.toml .
+COPY src ./src
+COPY static ./static
+COPY server.py .
+RUN pip install --no-cache-dir --no-deps -e .
 
 # Expose the port Uvicorn will run on
 EXPOSE 8000
 
-# Default command to run the app
-# Replace "main:app" with your actual FastAPI entrypoint
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Mount credentials and runtime data separately; they are not image contents.
+CMD ["uvicorn", "kalshi_workstation.app:app", "--host", "0.0.0.0", "--port", "8000"]

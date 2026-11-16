@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kalshi Arbitrage Scanner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    }
+    // Apply dark mode immediately to prevent flash
+    if (localStorage.getItem('darkMode') === 'true') {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans relative transition-colors duration-200">
+
+  <!-- Header -->
+  <header class="text-white p-4 shadow-md" style="background-color: #0015b2;">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <h1 class="text-2xl font-semibold">Kalshi Arbitrage Scanner</h1>
+      <nav class="flex items-center gap-4">
+        <button onclick="toggleDarkMode()" class="p-2 rounded-lg hover:bg-blue-700 transition" title="Toggle Dark Mode">
+          <svg id="darkModeIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path id="sunIcon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+          </svg>
+        </button>
+        <a href="/" class="hover:text-blue-200 transition">Dashboard</a>
+        <a href="/arbitrage" class="text-blue-200 font-semibold border-b-2 border-white">Arbitrage</a>
+        <a href="/liquidity" class="hover:text-blue-200 transition">Liquidity</a>
+        <a href="/performance" class="hover:text-blue-200 transition">Performance</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto p-4 space-y-6">
+
+    <!-- Account Info -->
+    <section>
+      <h2 class="text-xl font-semibold mb-3 text-[#0015b2] dark:text-blue-400">Account</h2>
+      <div id="user_info" class="grid gap-4 sm:grid-cols-3"></div>
+    </section>
+
+    <!-- Settings Bar -->
+    <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <div class="flex flex-wrap items-center gap-6">
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="dry_run" onchange="toggleDryRun()" class="rounded">
+          <label for="dry_run" class="text-sm font-medium text-orange-600 dark:text-orange-400">DRY RUN MODE</label>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Threshold:</label>
+          <select id="threshold" onchange="updateSettings()" class="border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded px-2 py-1 text-sm">
+            <option value="1">1c</option>
+            <option value="2">2c</option>
+            <option value="3">3c</option>
+            <option value="4">4c</option>
+            <option value="5" selected>5c</option>
+            <option value="7">7c</option>
+            <option value="10">10c</option>
+            <option value="15">15c</option>
+            <option value="20">20c</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Buffer:</label>
+          <select id="buffer" onchange="updateSettings()" class="border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded px-2 py-1 text-sm">
+            <option value="0">0c</option>
+            <option value="1" selected>1c</option>
+            <option value="2">2c</option>
+            <option value="3">3c</option>
+            <option value="5">5c</option>
+            <option value="10">10c</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="skip_confirmation" onchange="updateSettings()" class="rounded">
+          <label for="skip_confirmation" class="text-sm text-gray-700 dark:text-gray-300">Skip confirmation</label>
+        </div>
+        <div class="border-l border-gray-300 dark:border-gray-600 h-6"></div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="auto_arb" onchange="updateSettings()" class="rounded accent-green-600">
+          <label for="auto_arb" class="text-sm font-medium text-green-700 dark:text-green-400">Auto-Arb</label>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Auto Qty:</label>
+          <input type="number" id="auto_arb_quantity" min="1" value="10" onchange="updateSettings()"
+            class="w-20 border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded px-2 py-1 text-sm">
+        </div>
+      </div>
+    </section>
+
+    <!-- Dry Run Banner -->
+    <div id="dryRunBanner" class="hidden bg-orange-100 dark:bg-orange-900/30 border-l-4 border-orange-500 text-orange-700 dark:text-orange-300 p-4 rounded">
+      <div class="flex items-center">
+        <span class="text-lg mr-2">🔸</span>
+        <p><strong>DRY RUN MODE ACTIVE</strong> - No real orders will be executed. Orders will be logged but not sent to Kalshi.</p>
+      </div>
+    </div>
+
+    <!-- Auto-Arb Banner -->
+    <div id="autoArbBanner" class="hidden bg-green-100 dark:bg-green-900/30 border-l-4 border-green-500 text-green-700 dark:text-green-300 p-4 rounded">
+      <div class="flex items-center">
+        <span class="text-lg mr-2">🤖</span>
+        <p><strong>AUTO-ARB ENABLED</strong> - Arbitrage opportunities meeting the threshold will be automatically executed.</p>
+      </div>
+    </div>
+
+    <!-- Opportunities Section -->
+    <section>
+      <h2 class="text-xl font-semibold mb-3 text-[#0015b2] dark:text-blue-400">Arbitrage Opportunities</h2>
+      <div id="opportunities" class="space-y-4"></div>
+    </section>
+
+    <!-- Market Groups Section -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold text-[#0015b2] dark:text-blue-400">Market Groups</h2>
+        <button onclick="showCreateGroupModal()" class="text-white px-4 py-2 rounded-lg text-sm font-medium" style="background-color: #0015b2;" onmouseover="this.style.backgroundColor='#001299'" onmouseout="this.style.backgroundColor='#0015b2'">
+          + Create New Group
+        </button>
+      </div>
+      <div id="groups" class="space-y-4"></div>
+    </section>
+
+    <!-- Activity Log -->
+    <section>
+      <h2 class="text-xl font-semibold mb-3 text-[#0015b2] dark:text-blue-400">Activity Log</h2>
+      <div id="messages" class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 h-48 overflow-y-auto text-sm"></div>
+    </section>
+
+  </main>
+
+  <!-- Create Group Modal -->
+  <div id="createGroupModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Create New Group</h3>
+      <input type="text" id="newGroupName" placeholder="Group name (e.g., Ravens Win)"
+        class="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      <div class="flex gap-3 justify-end">
+        <button onclick="hideCreateGroupModal()" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Cancel</button>
+        <button onclick="createGroup()" class="px-4 py-2 text-white rounded-lg" style="background-color: #0015b2;" onmouseover="this.style.backgroundColor='#001299'" onmouseout="this.style.backgroundColor='#0015b2'">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Group Modal -->
+  <div id="editGroupModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Edit Group</h3>
+      <input type="text" id="editGroupName" placeholder="Group name"
+        class="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      <div class="flex gap-3 justify-end">
+        <button onclick="hideEditGroupModal()" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Cancel</button>
+        <button onclick="saveGroupName()" class="px-4 py-2 text-white rounded-lg" style="background-color: #0015b2;" onmouseover="this.style.backgroundColor='#001299'" onmouseout="this.style.backgroundColor='#0015b2'">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Market Modal -->
+  <div id="addMarketModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Add Market to <span id="addMarketGroupName"></span></h3>
+      <input type="text" id="newMarketTicker" placeholder="Market ticker (e.g., KXAFCONGAME-25DEC29ANGEGY)"
+        class="w-full border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-600">
+      <div class="flex items-center gap-2 mb-4 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg">
+        <input type="checkbox" id="newMarketReverse" class="rounded accent-amber-600">
+        <label for="newMarketReverse" class="text-sm text-amber-800 dark:text-amber-300">
+          <strong>Reverse Market</strong> - This market resolves opposite to others in the group
+          <br><span class="text-xs text-amber-600 dark:text-amber-400">(e.g., "Cardinals Win" is reverse of "Rams Win" when they play each other)</span>
+        </label>
+      </div>
+      <div class="flex gap-3 justify-end">
+        <button onclick="hideAddMarketModal()" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Cancel</button>
+        <button onclick="addMarket()" class="px-4 py-2 text-white rounded-lg" style="background-color: #0015b2;" onmouseover="this.style.backgroundColor='#001299'" onmouseout="this.style.backgroundColor='#0015b2'">Add Market</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Execute Confirmation Modal -->
+  <div id="executeModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
+      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Confirm Arbitrage Execution</h3>
+      <div id="executeDetails" class="mb-4 text-sm space-y-2"></div>
+      <div class="bg-yellow-50 dark:bg-yellow-900/30 border-l-4 border-yellow-400 p-3 mb-4">
+        <p class="text-yellow-700 dark:text-yellow-300 text-sm">
+          <strong>Warning:</strong> Partial fills may occur. One side may execute while the other does not.
+        </p>
+      </div>
+      <div class="flex gap-3 justify-end">
+        <button onclick="hideExecuteModal()" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">Cancel</button>
+        <button onclick="confirmExecute()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg">Execute</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let lastSuccessfulRefresh = Date.now();
+  let currentAddMarketGroupId = null;
+  let currentEditGroupId = null;
+  let pendingExecution = null;
+  let collapsedGroups = new Set(); // Track collapsed group IDs
+
+  const centsToDollars = (value) => ((value ?? 0) / 100).toFixed(2);
+
+  // Dark mode toggle
+  function toggleDarkMode() {
+    const html = document.documentElement;
+    const isDark = html.classList.toggle('dark');
+    localStorage.setItem('darkMode', isDark);
+    updateDarkModeIcon();
+  }
+
+  function updateDarkModeIcon() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const icon = document.getElementById('darkModeIcon');
+    if (isDark) {
+      // Moon icon for dark mode
+      icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>';
+    } else {
+      // Sun icon for light mode
+      icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>';
+    }
+  }
+
+  // Initialize dark mode icon on load
+  document.addEventListener('DOMContentLoaded', updateDarkModeIcon);
+
+  async function refresh() {
+    try {
+      const res = await fetch('/api/arb/status');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      lastSuccessfulRefresh = Date.now();
+
+      renderUserInfo(data.user_info);
+      renderSettings(data.settings, data.dry_run);
+      renderOpportunities(data.groups);
+      renderGroups(data.groups);
+      renderMessages(data.messages);
+    } catch (e) {
+      console.error('Refresh failed:', e);
+    }
+  }
+
+  function renderUserInfo(user) {
+    const container = document.getElementById('user_info');
+    user = user || {};
+    container.innerHTML = `
+      <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+        <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Portfolio Value</h3>
+        <p class="text-2xl font-semibold text-gray-800 dark:text-gray-100">$${centsToDollars(user.balance + user.portfolio_value)}</p>
+      </div>
+      <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+        <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Free Cash</h3>
+        <p class="text-2xl font-semibold text-gray-800 dark:text-gray-100">$${centsToDollars(user.balance)}</p>
+      </div>
+      <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+        <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">In Positions</h3>
+        <p class="text-2xl font-semibold text-gray-800 dark:text-gray-100">$${centsToDollars(user.portfolio_value)}</p>
+      </div>
+    `;
+  }
+
+  function renderSettings(settings, dryRun) {
+    document.getElementById('threshold').value = settings.threshold;
+    document.getElementById('buffer').value = settings.buffer;
+    document.getElementById('skip_confirmation').checked = settings.skip_confirmation;
+    document.getElementById('auto_arb').checked = settings.auto_arb;
+    document.getElementById('auto_arb_quantity').value = settings.auto_arb_quantity;
+    document.getElementById('dry_run').checked = dryRun;
+
+    // Show/hide dry run banner
+    const banner = document.getElementById('dryRunBanner');
+    if (dryRun) {
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
+    }
+
+    // Show/hide auto-arb banner
+    const autoArbBanner = document.getElementById('autoArbBanner');
+    if (autoArbBanner) {
+      if (settings.auto_arb) {
+        autoArbBanner.classList.remove('hidden');
+      } else {
+        autoArbBanner.classList.add('hidden');
+      }
+    }
+  }
+
+  async function toggleDryRun() {
+    const dryRun = document.getElementById('dry_run').checked;
+    await fetch('/api/settings/dry_run', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({dry_run: dryRun})
+    });
+    refresh();
+  }
+
+  function renderOpportunities(groups) {
+    const container = document.getElementById('opportunities');
+    const opportunities = groups.filter(g => g.opportunity).map(g => ({...g.opportunity, groupName: g.name, groupId: g.id}));
+
+    if (!opportunities.length) {
+      container.innerHTML = `
+        <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+          No arbitrage opportunities found meeting the threshold.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = opportunities.map(opp => {
+      const sideAColor = opp.market_a_side === 'yes' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400';
+      const sideBColor = opp.market_b_side === 'yes' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400';
+      const isReverseArb = opp.is_reverse_arb;
+      const arbTypeLabel = isReverseArb ? '<span class="bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs px-2 py-0.5 rounded ml-2">REVERSE ARB</span>' : '';
+
+      return `
+        <div class="bg-gradient-to-r ${isReverseArb ? 'from-amber-50 to-yellow-50 dark:from-amber-900/30 dark:to-yellow-900/30 border-amber-200 dark:border-amber-700' : 'from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-green-200 dark:border-green-700'} border rounded-lg p-4">
+          <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h3 class="text-lg font-semibold ${isReverseArb ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'}">${opp.groupName}${arbTypeLabel}</h3>
+              <p class="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                Buy <span class="font-medium ${sideAColor}">${opp.market_a_side.toUpperCase()}</span> @ ${opp.market_a_price}c
+                (<span class="font-mono text-xs">${opp.market_a}</span>)
+                + Buy <span class="font-medium ${sideBColor}">${opp.market_b_side.toUpperCase()}</span> @ ${opp.market_b_price}c
+                (<span class="font-mono text-xs">${opp.market_b}</span>)
+              </p>
+              <p class="text-lg font-bold ${isReverseArb ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400'} mt-2">
+                Profit: ${opp.profit}c per contract (Total cost: ${opp.total_cost}c)
+              </p>
+            </div>
+            <div class="flex items-center gap-3">
+              <input type="number" id="qty-${opp.groupId}" value="10" min="1"
+                class="w-20 border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded px-2 py-1 text-sm" placeholder="Qty">
+              <button onclick="executeArbitrage('${opp.groupId}', '${opp.market_a}', '${opp.market_a_side}', '${opp.market_b}', '${opp.market_b_side}', ${opp.market_a_price}, ${opp.market_b_price})"
+                class="${isReverseArb ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'} text-white px-4 py-2 rounded-lg font-medium">
+                Execute
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function toggleGroupCollapse(groupId) {
+    if (collapsedGroups.has(groupId)) {
+      collapsedGroups.delete(groupId);
+    } else {
+      collapsedGroups.add(groupId);
+    }
+    refresh();
+  }
+
+  function renderGroups(groups) {
+    const container = document.getElementById('groups');
+
+    if (!groups.length) {
+      container.innerHTML = `
+        <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+          No market groups created yet. Click "Create New Group" to get started.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = groups.map(group => {
+      const opportunity = group.opportunity;
+      const highlightMarkets = opportunity ? [opportunity.market_a, opportunity.market_b] : [];
+      const isCollapsed = collapsedGroups.has(group.id);
+
+      return `
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 flex items-center justify-between border-b dark:border-gray-600">
+            <div class="flex items-center gap-3">
+              <button onclick="toggleGroupCollapse('${group.id}')" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 focus:outline-none">
+                <svg class="w-5 h-5 transition-transform ${isCollapsed ? '' : 'rotate-90'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+              </button>
+              <h3 class="font-semibold text-gray-800 dark:text-gray-100">${group.name}</h3>
+              <span class="text-xs text-gray-500 dark:text-gray-400">(${group.markets.length} markets)</span>
+              ${opportunity ? `<span class="${opportunity.is_reverse_arb ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300' : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'} text-xs px-2 py-1 rounded">+${opportunity.profit}c ${opportunity.is_reverse_arb ? 'reverse ' : ''}arb</span>` : ''}
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="showAddMarketModal('${group.id}', '${group.name}')"
+                class="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 text-sm font-medium">+ Add Market</button>
+              <button onclick="showEditGroupModal('${group.id}', '${group.name.replace(/'/g, "\\'")}')"
+                class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium">Edit</button>
+              <button onclick="deleteGroup('${group.id}')"
+                class="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 text-sm">Delete</button>
+            </div>
+          </div>
+          <div class="p-4 ${isCollapsed ? 'hidden' : ''}">
+            ${group.markets.length ? `
+              <div class="space-y-2">
+                ${group.markets.map(m => {
+                  const isHighlighted = highlightMarkets.includes(m.ticker);
+                  const highlightSide = opportunity && m.ticker === opportunity.market_a ? opportunity.market_a_side.toUpperCase() :
+                                       opportunity && m.ticker === opportunity.market_b ? opportunity.market_b_side.toUpperCase() : null;
+                  const isReverse = m.is_reverse;
+                  return `
+                    <div class="flex items-center justify-between p-3 rounded-lg ${isHighlighted ? 'bg-yellow-50 dark:bg-yellow-900/30 border-l-4 border-yellow-400' : 'bg-gray-50 dark:bg-gray-700'}">
+                      <div>
+                        <div class="flex items-center gap-2">
+                          <span class="font-mono text-sm text-gray-800 dark:text-gray-200">${m.ticker}</span>
+                          ${isReverse ? '<span class="bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs px-1.5 py-0.5 rounded">REVERSE</span>' : ''}
+                          ${isHighlighted ? `<span class="text-xs font-bold ${highlightSide === 'YES' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">(Buy ${highlightSide})</span>` : ''}
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${m.title || m.yes_sub_title || ''}</p>
+                        <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                          YES: ${m.yes_bid}c / ${m.yes_ask}c | NO: ${m.no_bid}c / ${m.no_ask}c
+                        </p>
+                      </div>
+                      <button onclick="removeMarket('${group.id}', '${m.ticker}')"
+                        class="text-red-400 hover:text-red-600 dark:hover:text-red-300 text-lg font-bold">&times;</button>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <p class="text-gray-500 dark:text-gray-400 text-sm text-center py-4">No markets in this group. Add at least 2 markets to detect arbitrage.</p>
+            `}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderMessages(messages) {
+    const container = document.getElementById('messages');
+    messages = messages || [];
+
+    if (!messages.length) {
+      container.innerHTML = '<p class="text-gray-400 dark:text-gray-500">No activity yet.</p>';
+      return;
+    }
+
+    container.innerHTML = messages.map(m => `
+      <div class="border-l-4 pl-2 my-1 ${
+        m.type.toLowerCase() === 'error' ? 'border-red-500 text-red-600 dark:text-red-400' :
+        m.type.toLowerCase() === 'trade_result' ? 'border-green-500 text-green-600 dark:text-green-400' :
+        'border-gray-400 text-gray-600 dark:text-gray-400'
+      }">
+        <span class="text-xs text-gray-400 dark:text-gray-500">[${new Date(m.timestamp).toLocaleTimeString()}]</span>
+        <b>${m.type}</b>: ${m.text}
+      </div>
+    `).join('');
+  }
+
+  // Settings
+  async function updateSettings() {
+    const threshold = parseInt(document.getElementById('threshold').value);
+    const buffer = parseInt(document.getElementById('buffer').value);
+    const skip_confirmation = document.getElementById('skip_confirmation').checked;
+    const auto_arb = document.getElementById('auto_arb').checked;
+    const auto_arb_quantity = parseInt(document.getElementById('auto_arb_quantity').value) || 10;
+
+    await fetch('/api/arb/settings', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({threshold, buffer, skip_confirmation, auto_arb, auto_arb_quantity})
+    });
+    refresh();
+  }
+
+  // Group management
+  function showCreateGroupModal() {
+    document.getElementById('createGroupModal').classList.remove('hidden');
+    document.getElementById('createGroupModal').classList.add('flex');
+    document.getElementById('newGroupName').focus();
+  }
+
+  function hideCreateGroupModal() {
+    document.getElementById('createGroupModal').classList.add('hidden');
+    document.getElementById('createGroupModal').classList.remove('flex');
+    document.getElementById('newGroupName').value = '';
+  }
+
+  async function createGroup() {
+    const name = document.getElementById('newGroupName').value.trim();
+    if (!name) return alert('Please enter a group name');
+
+    await fetch('/api/arb/groups', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name})
+    });
+
+    hideCreateGroupModal();
+    refresh();
+  }
+
+  async function deleteGroup(groupId) {
+    if (!confirm('Are you sure you want to delete this group?')) return;
+
+    await fetch(`/api/arb/groups/${groupId}`, {method: 'DELETE'});
+    refresh();
+  }
+
+  // Edit group
+  function showEditGroupModal(groupId, groupName) {
+    currentEditGroupId = groupId;
+    document.getElementById('editGroupName').value = groupName;
+    document.getElementById('editGroupModal').classList.remove('hidden');
+    document.getElementById('editGroupModal').classList.add('flex');
+    document.getElementById('editGroupName').focus();
+  }
+
+  function hideEditGroupModal() {
+    document.getElementById('editGroupModal').classList.add('hidden');
+    document.getElementById('editGroupModal').classList.remove('flex');
+    document.getElementById('editGroupName').value = '';
+    currentEditGroupId = null;
+  }
+
+  async function saveGroupName() {
+    const name = document.getElementById('editGroupName').value.trim();
+    if (!name) return alert('Please enter a group name');
+    if (!currentEditGroupId) return;
+
+    const res = await fetch(`/api/arb/groups/${currentEditGroupId}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name})
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error || 'Failed to update group');
+      return;
+    }
+
+    hideEditGroupModal();
+    refresh();
+  }
+
+  // Market management
+  function showAddMarketModal(groupId, groupName) {
+    currentAddMarketGroupId = groupId;
+    document.getElementById('addMarketGroupName').textContent = groupName;
+    document.getElementById('addMarketModal').classList.remove('hidden');
+    document.getElementById('addMarketModal').classList.add('flex');
+    document.getElementById('newMarketTicker').focus();
+  }
+
+  function hideAddMarketModal() {
+    document.getElementById('addMarketModal').classList.add('hidden');
+    document.getElementById('addMarketModal').classList.remove('flex');
+    document.getElementById('newMarketTicker').value = '';
+    document.getElementById('newMarketReverse').checked = false;
+    currentAddMarketGroupId = null;
+  }
+
+  async function addMarket() {
+    const ticker = document.getElementById('newMarketTicker').value.trim();
+    const is_reverse = document.getElementById('newMarketReverse').checked;
+    if (!ticker) return alert('Please enter a market ticker');
+    if (!currentAddMarketGroupId) return;
+
+    const res = await fetch(`/api/arb/groups/${currentAddMarketGroupId}/markets`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ticker, is_reverse})
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      alert(data.error || 'Failed to add market');
+      return;
+    }
+
+    hideAddMarketModal();
+    refresh();
+  }
+
+  async function removeMarket(groupId, ticker) {
+    if (!confirm(`Remove market ${ticker}?`)) return;
+
+    await fetch(`/api/arb/groups/${groupId}/markets/${encodeURIComponent(ticker)}`, {method: 'DELETE'});
+    refresh();
+  }
+
+  // Arbitrage execution
+  function executeArbitrage(groupId, tickerA, sideA, tickerB, sideB, priceA, priceB) {
+    const qtyInput = document.getElementById(`qty-${groupId}`);
+    const quantity = parseInt(qtyInput?.value || 10);
+
+    if (quantity < 1) {
+      alert('Quantity must be at least 1');
+      return;
+    }
+
+    const skipConfirmation = document.getElementById('skip_confirmation').checked;
+
+    if (skipConfirmation) {
+      doExecute(tickerA, sideA, tickerB, sideB, quantity);
+    } else {
+      pendingExecution = {tickerA, sideA, tickerB, sideB, quantity, priceA, priceB};
+      showExecuteModal(tickerA, sideA, tickerB, sideB, quantity, priceA, priceB);
+    }
+  }
+
+  function showExecuteModal(tickerA, sideA, tickerB, sideB, quantity, priceA, priceB) {
+    const profit = 100 - priceA - priceB;
+    const totalCost = (priceA + priceB) * quantity;
+    const totalProfit = profit * quantity;
+    const isReverseArb = sideA === sideB;
+
+    const colorA = sideA === 'yes' ? 'green' : 'red';
+    const colorB = sideB === 'yes' ? 'green' : 'red';
+
+    document.getElementById('executeDetails').innerHTML = `
+      ${isReverseArb ? '<div class="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300 text-sm p-2 rounded mb-3"><strong>Reverse Arb:</strong> Buying same side on both markets</div>' : ''}
+      <div class="grid grid-cols-2 gap-2">
+        <div class="bg-${colorA}-50 dark:bg-${colorA}-900/30 p-3 rounded">
+          <p class="text-xs text-gray-500 dark:text-gray-400">Buy ${sideA.toUpperCase()}</p>
+          <p class="font-mono text-sm text-gray-800 dark:text-gray-200">${tickerA}</p>
+          <p class="text-${colorA}-700 dark:text-${colorA}-400 font-semibold">${priceA}c x ${quantity}</p>
+        </div>
+        <div class="bg-${colorB}-50 dark:bg-${colorB}-900/30 p-3 rounded">
+          <p class="text-xs text-gray-500 dark:text-gray-400">Buy ${sideB.toUpperCase()}</p>
+          <p class="font-mono text-sm text-gray-800 dark:text-gray-200">${tickerB}</p>
+          <p class="text-${colorB}-700 dark:text-${colorB}-400 font-semibold">${priceB}c x ${quantity}</p>
+        </div>
+      </div>
+      <div class="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded">
+        <p class="text-sm text-gray-800 dark:text-gray-200">Total Cost: <span class="font-semibold">$${(totalCost / 100).toFixed(2)}</span></p>
+        <p class="text-sm ${isReverseArb ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400'}">Expected Profit: <span class="font-semibold">$${(totalProfit / 100).toFixed(2)}</span> (${profit}c x ${quantity})</p>
+      </div>
+    `;
+
+    document.getElementById('executeModal').classList.remove('hidden');
+    document.getElementById('executeModal').classList.add('flex');
+  }
+
+  function hideExecuteModal() {
+    document.getElementById('executeModal').classList.add('hidden');
+    document.getElementById('executeModal').classList.remove('flex');
+    pendingExecution = null;
+  }
+
+  async function confirmExecute() {
+    if (!pendingExecution) return;
+
+    const {tickerA, sideA, tickerB, sideB, quantity} = pendingExecution;
+    hideExecuteModal();
+    await doExecute(tickerA, sideA, tickerB, sideB, quantity);
+  }
+
+  async function doExecute(tickerA, sideA, tickerB, sideB, quantity) {
+    try {
+      const res = await fetch('/api/arb/execute', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ticker_a: tickerA, side_a: sideA, ticker_b: tickerB, side_b: sideB, quantity})
+      });
+
+      const data = await res.json();
+      if (data.errors && data.errors.length) {
+        alert('Execution had errors: ' + data.errors.join(', '));
+      }
+
+      refresh();
+    } catch (e) {
+      alert('Execution failed: ' + e.message);
+    }
+  }
+
+  // Polling and watchdog
+  setInterval(refresh, 2000);
+  refresh();
+
+  function watchdog() {
+    const now = Date.now();
+    const diff = now - lastSuccessfulRefresh;
+
+    if (diff > 4000) {
+      const isDark = document.documentElement.classList.contains('dark');
+      document.body.innerHTML = `
+        <div class="w-full h-screen flex items-center justify-center ${isDark ? 'bg-red-900/30' : 'bg-red-50'}">
+          <div class="text-center">
+            <h1 class="text-3xl font-bold ${isDark ? 'text-red-400' : 'text-red-600'} mb-4">Connection Lost</h1>
+            <p class="${isDark ? 'text-gray-300' : 'text-gray-700'} mb-6">
+              No successful updates for ${Math.floor(diff / 1000)} seconds.
+            </p>
+            <button onclick="location.reload()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+              Reload
+            </button>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  setInterval(watchdog, 500);
+
+  // Handle Enter key in modals
+  document.getElementById('newGroupName').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') createGroup();
+  });
+
+  document.getElementById('editGroupName').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') saveGroupName();
+  });
+
+  document.getElementById('newMarketTicker').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') addMarket();
+  });
+</script>
+
+</body>
+</html>

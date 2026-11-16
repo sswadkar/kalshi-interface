@@ -1,0 +1,41 @@
+flowchart TB
+    UI["Browser<br/>Existing four pages and 30 routes"] --> App["app.py + pages.py<br/>Feature router composition"]
+    App --> Trading & Arb & Monitor & LP
+    subgraph features["features — operator workflows"]
+        Trading["trading/<br/>Manual orders, dashboard, history"]
+        Arb["arbitrage/<br/>Groups, analysis, planner, polling"]
+        Monitor["liquidity_monitor/<br/>Scanner and account order monitor"]
+        LP["liquidity_provider/<br/>Quote policy, runner, controls"]
+    end
+    subgraph core["core — shared implementation"]
+        Execution["execution/service.py + orders.py<br/>Shared mutation entry point<br/>Existing encoding and outcome interpretation"]
+        Data["market_data.py + positions.py<br/>Market summaries, books, positions"]
+        Rewards["liquidity.py<br/>Shared reward calculations"]
+        Portfolio["portfolio.py<br/>Balance, history, reward integration"]
+        REST["exchange/kalshi.py + programs.py<br/>Signing, HTTP, incentive metadata"]
+        Stream["exchange/stream.py<br/>WebSocket and private callbacks"]
+    end
+    Runtime["runtime.py<br/>Owns five tasks; awaits shutdown"] --> Trading & Arb & LP & Portfolio
+    Config["config.py<br/>Explicit project/data paths"] --> App & Portfolio
+    Catalog["App-owned program catalog<br/>LP refreshes; monitor and rewards read"] --> Monitor & Portfolio
+    LP -->|refreshes| Catalog
+    Trading & Arb & LP -->|submit / cancel| Execution
+    Execution -->|HTTP writes| REST
+    Trading --> Data & Portfolio
+    Arb & Monitor & LP -->|reads| REST
+    Monitor & LP & Portfolio --> Rewards
+    Data & Portfolio -->|reads| REST
+    LP -->|starts| Stream
+    Stream -->|updates books| Data
+    Stream -->|fills and order events| LP
+    Exchange["Kalshi REST and WebSocket APIs"] <--> REST & Stream
+    Files[("Existing JSON settings/history<br/>No durable order journal yet")] <--> Arb & LP & Portfolio
+    Keys["Private key<br/>Loaded on authenticated use"] --> REST & Stream
+    Limits["Still pending<br/>Central risk admission and durable recovery<br/>Unified simulation, fill deduplication, valid arbitrage<br/>Freshness gates and truthful stop outcomes"]
+    Execution -.-> Limits
+    classDef feature fill:#e9f2ff,stroke:#3169a8,color:#14283f
+    classDef shared fill:#eaf5ec,stroke:#4b8058,color:#1d3423
+    classDef pending fill:#fff0ec,stroke:#ab5844,color:#58281e
+    class Trading,Arb,Monitor,LP,App,UI feature
+    class Execution,Data,Rewards,Portfolio,REST,Stream shared
+    class Limits pending

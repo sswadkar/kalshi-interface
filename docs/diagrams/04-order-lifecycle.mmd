@@ -1,0 +1,41 @@
+stateDiagram-v2
+    [*] --> Recorded: Persist a unique intention
+    Recorded --> Rejected: Invalid or blocked by policy
+    Recorded --> Submitting: Reserve exposure and commit identity
+    Submitting --> Rejected: Confirmed rejection
+    Submitting --> Open: Confirmed resting order
+    Submitting --> Partial: Confirmed partial fill with remainder open
+    Submitting --> Filled: Confirmed complete fill
+    Submitting --> Canceled: IOC remainder canceled
+    Submitting --> Unknown: Timeout or ambiguous outcome
+    Open --> Partial: Canonical fill applied once
+    Open --> Filled: Remaining quantity filled
+    Partial --> Partial: Additional unique fill
+    Partial --> Filled: Remaining quantity filled
+    Open --> CancelPending: Cancellation intention recorded
+    Partial --> CancelPending: Cancellation intention recorded
+    CancelPending --> Canceled: Cancellation confirmed
+    CancelPending --> Filled: Fill wins the cancel race
+    CancelPending --> Open: Cancel failed and order confirmed unfilled/open
+    CancelPending --> Partial: Cancel failed and partial order remains open
+    CancelPending --> Unknown: Outcome cannot be established
+    Unknown --> Open: Reconciled open
+    Unknown --> Partial: Reconciled partial/open
+    Unknown --> Filled: Reconciled filled
+    Unknown --> Canceled: Reconciled canceled
+    Unknown --> Rejected: Confirmed no accepted order
+    Unknown --> Unknown: Evidence insufficient / pause and retain reservation
+    Rejected --> [*]
+    Filled --> [*]
+    Canceled --> [*]
+
+    note right of Unknown
+        Unknown is a durable nonterminal state.
+        A timeout or one empty lookup is not proof of rejection.
+        Operator review is required when reconciliation cannot resolve it.
+    end note
+    note right of Canceled
+        Canceled orders can have nonzero filled quantity.
+        Fill facts remain reconcilable after order termination.
+        Terminal state never deletes execution history.
+    end note

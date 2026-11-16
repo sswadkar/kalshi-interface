@@ -5,42 +5,79 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kalshi Live Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    }
+    // Apply dark mode immediately to prevent flash
+    if (localStorage.getItem('darkMode') === 'true') {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans relative">
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans relative transition-colors duration-200">
 
   <!-- Header -->
   <header class="bg-indigo-600 text-white p-4 shadow-md">
-    <h1 class="text-2xl font-semibold text-center">Kalshi Live Dashboard</h1>
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <h1 class="text-2xl font-semibold">Kalshi Live Dashboard</h1>
+      <nav class="flex items-center gap-4">
+        <button onclick="toggleDarkMode()" class="p-2 rounded-lg hover:bg-indigo-700 transition" title="Toggle Dark Mode">
+          <svg id="darkModeIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path id="sunIcon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+          </svg>
+        </button>
+        <a href="/" class="text-indigo-200 font-semibold border-b-2 border-white">Dashboard</a>
+        <a href="/arbitrage" class="hover:text-indigo-200 transition">Arbitrage</a>
+        <a href="/liquidity" class="hover:text-indigo-200 transition">Liquidity</a>
+        <a href="/performance" class="hover:text-indigo-200 transition">Performance</a>
+      </nav>
+    </div>
   </header>
 
   <main class="max-w-6xl mx-auto p-4 space-y-8">
+
+    <!-- Dry Run Banner -->
+    <div id="dryRunBanner" class="hidden bg-orange-100 dark:bg-orange-900/30 border-l-4 border-orange-500 text-orange-700 dark:text-orange-300 p-4 rounded">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="text-lg mr-2">🔸</span>
+          <p><strong>DRY RUN MODE ACTIVE</strong> - No real orders will be executed.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="dry_run" onchange="toggleDryRun()" class="rounded" checked>
+          <label for="dry_run" class="text-sm font-medium">Enabled</label>
+        </div>
+      </div>
+    </div>
+
     <section>
-      <h2 class="text-xl font-semibold mb-3 text-indigo-700">User Data</h2>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700 dark:text-indigo-400">User Data</h2>
       <div id="user_info" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
     </section>
 
     <!-- Markets -->
     <section>
-      <h2 class="text-xl font-semibold mb-3 text-indigo-700">Markets</h2>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700 dark:text-indigo-400">Markets</h2>
       <div id="markets" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
     </section>
 
     <!-- Positions -->
     <section>
-      <h2 class="text-xl font-semibold mb-3 text-indigo-700">Positions</h2>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700 dark:text-indigo-400">Positions</h2>
       <div id="positions" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
     </section>
 
     <section>
-      <h2 class="text-xl font-semibold mb-3 text-indigo-700">Resting Orders</h2>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700 dark:text-indigo-400">Resting Orders</h2>
       <div id="resting_orders" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
     </section>
 
 
     <!-- Messages -->
     <section>
-      <h2 class="text-xl font-semibold mb-3 text-indigo-700">Activity Log</h2>
-      <div id="messages" class="bg-white rounded-lg shadow p-3 h-64 overflow-y-auto text-sm"></div>
+      <h2 class="text-xl font-semibold mb-3 text-indigo-700 dark:text-indigo-400">Activity Log</h2>
+      <div id="messages" class="bg-white dark:bg-gray-800 rounded-lg shadow p-3 h-64 overflow-y-auto text-sm"></div>
     </section>
 
   </main>
@@ -49,9 +86,48 @@
     let lastMessageCount = 0;
     let firstLastMessageCountCheck = false;
 
+    let lastSuccessfulRefresh = Date.now();
+
+    // Dark mode toggle
+    function toggleDarkMode() {
+      const html = document.documentElement;
+      const isDark = html.classList.toggle('dark');
+      localStorage.setItem('darkMode', isDark);
+      updateDarkModeIcon();
+    }
+
+    function updateDarkModeIcon() {
+      const isDark = document.documentElement.classList.contains('dark');
+      const icon = document.getElementById('darkModeIcon');
+      if (isDark) {
+        // Moon icon for dark mode
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>';
+      } else {
+        // Sun icon for light mode
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>';
+      }
+    }
+
+    // Initialize dark mode icon on load
+    document.addEventListener('DOMContentLoaded', updateDarkModeIcon);
+
     async function refresh() {
       const res = await fetch('/api/status');
+      if (!res.ok) return;
       const data = await res.json();
+
+      lastSuccessfulRefresh = Date.now();
+
+      // Handle dry run banner
+      const dryRunBanner = document.getElementById('dryRunBanner');
+      const dryRunCheckbox = document.getElementById('dry_run');
+      if (data.dry_run) {
+        dryRunBanner.classList.remove('hidden');
+        dryRunCheckbox.checked = true;
+      } else {
+        dryRunBanner.classList.add('hidden');
+        dryRunCheckbox.checked = false;
+      }
 
       const user = data.user_info || {};
       const userInfoDiv = document.getElementById("user_info");
@@ -59,19 +135,24 @@
       const centsToDollars = (value) => ((value ?? 0) / 100).toFixed(2);
 
       userInfoDiv.innerHTML = `
-        <div class="bg-white shadow rounded-lg p-4">
-          <h3 class="text-sm font-medium text-gray-500">Balance</h3>
-          <p class="text-2xl font-semibold text-gray-800">$${centsToDollars(user.balance)}</p>
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Portfolio Value</h3>
+          <p class="text-2xl font-semibold text-gray-800 dark:text-gray-100">$${centsToDollars(user.balance + user.portfolio_value)}</p>
         </div>
 
-        <div class="bg-white shadow rounded-lg p-4">
-          <h3 class="text-sm font-medium text-gray-500">Portfolio Value</h3>
-          <p class="text-2xl font-semibold text-gray-800">$${centsToDollars(user.portfolio_value)}</p>
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Free Cash</h3>
+          <p class="text-2xl font-semibold text-gray-800 dark:text-gray-100">$${centsToDollars(user.balance)}</p>
         </div>
 
-        <div class="bg-white shadow rounded-lg p-4">
-          <h3 class="text-sm font-medium text-gray-500">Last Updated</h3>
-          <p class="text-lg font-medium text-gray-700">
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">In Positions</h3>
+          <p class="text-2xl font-semibold text-gray-800 dark:text-gray-100">$${centsToDollars(user.portfolio_value)}</p>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+          <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</h3>
+          <p class="text-lg font-medium text-gray-700 dark:text-gray-300">
             ${user.updated_ts ? new Date(user.updated_ts * 1000).toLocaleString() : "—"}
           </p>
         </div>
@@ -98,74 +179,119 @@
       // ---- Markets ----
       document.getElementById('markets').innerHTML = markets.map(m => {
         const pos = positionMap[m.market_ticker];
+
         const positionText = pos
-          ? `<span class="text-sm text-gray-500 ml-2">(${pos.net > 0 ? 'YES' : pos.net < 0 ? 'NO' : 'FLAT'} ${pos.net} @ $${Math.abs(pos.avg)} → $${pos.liquidation.toFixed(2)})</span>`
-          : `<span class="text-sm text-gray-400 ml-2">(No Position)</span>`;
+          ? `<span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(${pos.net > 0 ? 'YES' : pos.net < 0 ? 'NO' : 'FLAT'} ${pos.net} @ $${Math.abs(pos.avg)} → $${pos.liquidation.toFixed(2)})</span>`
+          : `<span class="text-sm text-gray-400 dark:text-gray-500 ml-2">(No Position)</span>`;
+
+        // SELL ALL BUTTON
+        let sellAllButton = '';
+        if (pos) {
+          if (pos.net > 0) {
+            // Holding YES
+            sellAllButton = `
+              <button class="bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg py-2 font-semibold w-full mt-4"
+                onclick="trade('sell','yes','${m.market_ticker}', ${pos.net})">
+                Sell All YES (${pos.net} @ ${m.yes_bid})
+              </button>
+            `;
+          } else if (pos.net < 0) {
+            // Holding NO
+            const absPos = Math.abs(pos.net);
+            sellAllButton = `
+              <button class="bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg py-2 font-semibold w-full mt-4"
+                onclick="trade('sell','no','${m.market_ticker}', ${absPos})">
+                Sell All NO (${absPos} @ ${m.no_bid})
+              </button>
+            `;
+          }
+        }
 
         return `
-          <div class="bg-white p-5 rounded-xl shadow hover:shadow-lg transition duration-200 flex flex-col justify-between">
+          <div class="bg-white dark:bg-gray-800 p-5 rounded-xl shadow hover:shadow-lg transition duration-200 flex flex-col justify-between">
             <div>
-              <h3 class="text-lg font-semibold text-gray-800 mb-1 flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1 flex items-center justify-between">
                 ${m.team}
                 ${positionText}
               </h3>
-              <p class="text-sm text-gray-500 mb-3">
+              <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
                 YES ${m.yes_bid} / ${m.yes_ask} • NO ${m.no_bid} / ${m.no_ask}
               </p>
             </div>
 
             <!-- YES Trades -->
-            <div class="bg-green-50 p-3 rounded-lg mb-3">
-              <h4 class="text-green-700 font-semibold text-sm mb-2">YES Trades</h4>
+            <div class="bg-green-50 dark:bg-green-900/30 p-3 rounded-lg mb-3">
+              <h4 class="text-green-700 dark:text-green-400 font-semibold text-sm mb-2">YES Trades</h4>
               <div class="grid grid-cols-2 gap-3">
                 <button class="bg-green-500 hover:bg-green-600 text-white text-xs rounded-lg py-2 font-medium"
-                  onclick="trade('buy','yes','${m.market_ticker}',10)">Buy 10 YES (${m.yes_ask})</button>
-                <button class="bg-red-500 hover:bg-red-600 text-white text-xs rounded-lg py-2 font-medium"
-                  onclick="trade('sell','yes','${m.market_ticker}',10)">Sell 10 YES (${m.yes_bid})</button>
-                <button class="bg-green-500 hover:bg-green-600 text-white text-xs rounded-lg py-2 font-medium"
                   onclick="trade('buy','yes','${m.market_ticker}',50)">Buy 50 YES (${m.yes_ask})</button>
+
                 <button class="bg-red-500 hover:bg-red-600 text-white text-xs rounded-lg py-2 font-medium"
                   onclick="trade('sell','yes','${m.market_ticker}',50)">Sell 50 YES (${m.yes_bid})</button>
+
+                <button class="bg-green-500 hover:bg-green-600 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('buy','yes','${m.market_ticker}',150)">Buy 150 YES (${m.yes_ask})</button>
+
+                <button class="bg-red-500 hover:bg-red-600 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('sell','yes','${m.market_ticker}',150)">Sell 150 YES (${m.yes_bid})</button>
+
+                <button class="bg-green-500 hover:bg-green-600 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('buy','yes','${m.market_ticker}',450)">Buy 450 YES (${m.yes_ask})</button>
+
+                <button class="bg-red-500 hover:bg-red-600 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('sell','yes','${m.market_ticker}',450)">Sell 450 YES (${m.yes_bid})</button>
               </div>
             </div>
 
             <!-- NO Trades -->
-            <div class="bg-red-50 p-3 rounded-lg">
-              <h4 class="text-red-700 font-semibold text-sm mb-2">NO Trades</h4>
+            <div class="bg-red-50 dark:bg-red-900/30 p-3 rounded-lg">
+              <h4 class="text-red-700 dark:text-red-400 font-semibold text-sm mb-2">NO Trades</h4>
               <div class="grid grid-cols-2 gap-3">
                 <button class="bg-green-400 hover:bg-green-500 text-white text-xs rounded-lg py-2 font-medium"
-                  onclick="trade('buy','no','${m.market_ticker}',10)">Buy 10 NO (${m.no_ask})</button>
-                <button class="bg-red-400 hover:bg-red-500 text-white text-xs rounded-lg py-2 font-medium"
-                  onclick="trade('sell','no','${m.market_ticker}',10)">Sell 10 NO (${m.no_bid})</button>
-                <button class="bg-green-400 hover:bg-green-500 text-white text-xs rounded-lg py-2 font-medium"
                   onclick="trade('buy','no','${m.market_ticker}',50)">Buy 50 NO (${m.no_ask})</button>
+
                 <button class="bg-red-400 hover:bg-red-500 text-white text-xs rounded-lg py-2 font-medium"
                   onclick="trade('sell','no','${m.market_ticker}',50)">Sell 50 NO (${m.no_bid})</button>
+
+                <button class="bg-green-400 hover:bg-green-500 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('buy','no','${m.market_ticker}',150)">Buy 150 NO (${m.no_ask})</button>
+
+                <button class="bg-red-400 hover:bg-red-500 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('sell','no','${m.market_ticker}',150)">Sell 150 NO (${m.no_bid})</button>
+
+                <button class="bg-green-400 hover:bg-green-500 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('buy','no','${m.market_ticker}',450)">Buy 450 NO (${m.no_ask})</button>
+
+                <button class="bg-red-400 hover:bg-red-500 text-white text-xs rounded-lg py-2 font-medium"
+                  onclick="trade('sell','no','${m.market_ticker}',450)">Sell 450 NO (${m.no_bid})</button>
               </div>
             </div>
+
+            ${sellAllButton}
           </div>
         `;
       }).join('');
 
 
+
       // ---- Positions ----
       document.getElementById('positions').innerHTML = positions.map(p => `
-        <div class="bg-white p-5 rounded-xl shadow hover:shadow-lg transition duration-200">
-          <h4 class="font-semibold text-indigo-700 mb-1">${p.ticker}</h4>
-          <p class="text-sm text-gray-700 mb-1">Net: <b>${p.net_yes_position}</b> @ $${p.avg_share_price}</p>
-          <p class="text-sm text-gray-700 mb-1">Liquidation: <b>$${p.liquidation_value}</b></p>
-          <p class="text-xs text-gray-400">Fees: $${p.fees_paid_dollars}</p>
+        <div class="bg-white dark:bg-gray-800 p-5 rounded-xl shadow hover:shadow-lg transition duration-200">
+          <h4 class="font-semibold text-indigo-700 dark:text-indigo-400 mb-1">${p.ticker}</h4>
+          <p class="text-sm text-gray-700 dark:text-gray-300 mb-1">Net: <b>${p.net_yes_position}</b> @ $${p.avg_share_price}</p>
+          <p class="text-sm text-gray-700 dark:text-gray-300 mb-1">Liquidation: <b>$${p.liquidation_value}</b></p>
+          <p class="text-xs text-gray-400 dark:text-gray-500">Fees: $${p.fees_paid_dollars}</p>
         </div>
       `).join('');
 
       // ---- Messages + Toasts ----
       document.getElementById('messages').innerHTML = messages.map(m => `
         <div class="border-l-4 pl-2 my-1 ${
-          m.type.toLowerCase() === 'error' ? 'border-red-500 text-red-600' :
-          m.type.toLowerCase() === 'trade' ? 'border-green-500 text-green-600' :
-          'border-gray-400 text-gray-600'
+          m.type.toLowerCase() === 'error' ? 'border-red-500 text-red-600 dark:text-red-400' :
+          m.type.toLowerCase() === 'trade' ? 'border-green-500 text-green-600 dark:text-green-400' :
+          'border-gray-400 text-gray-600 dark:text-gray-400'
         }">
-          <span class="text-xs text-gray-400">[${new Date(m.timestamp).toLocaleTimeString()}]</span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">[${new Date(m.timestamp).toLocaleTimeString()}]</span>
           <b>${m.type}</b>: ${m.text}
         </div>
       `).join('');
@@ -180,6 +306,16 @@
       refresh();
     }
 
+    async function toggleDryRun() {
+      const dryRun = document.getElementById('dry_run').checked;
+      await fetch('/api/settings/dry_run', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({dry_run: dryRun})
+      });
+      refresh();
+    }
+
     setInterval(refresh, 2000);
     refresh();
 
@@ -190,15 +326,15 @@
       const orders = data.resting_orders || [];
 
       if (!orders.length) {
-        container.innerHTML = `<p class="text-gray-500">No resting orders.</p>`;
+        container.innerHTML = `<p class="text-gray-500 dark:text-gray-400">No resting orders.</p>`;
         return;
       }
 
       container.innerHTML = orders.map(o => `
-        <div class="bg-white shadow rounded-lg p-4">
-          <h3 class="font-semibold text-gray-800">${o.ticker}</h3>
-          <p class="text-sm text-gray-600">${o.side} ${o.action} @ $${o.price} (${o.remaining} remaining)</p>
-          <p class="text-xs text-gray-400">Queue position: ${o.queue_position ?? "—"}</p>
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
+          <h3 class="font-semibold text-gray-800 dark:text-gray-100">${o.ticker}</h3>
+          <p class="text-sm text-gray-600 dark:text-gray-300">${o.side} ${o.action} @ $${o.price} (${o.remaining} remaining)</p>
+          <p class="text-xs text-gray-400 dark:text-gray-500">Queue position: ${o.queue_position ?? "—"}</p>
           <button onclick="cancelOrder('${o.order_id}')"
             class="mt-2 bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs">
             Cancel
@@ -213,8 +349,37 @@
       loadRestingOrders();
     }
 
-    setInterval(loadRestingOrders, 2000);
+    const restingInterval = setInterval(loadRestingOrders, 2000);
     loadRestingOrders();
+
+    const refreshInterval = setInterval(refresh, 2000);
+
+    function watchdog() {
+    const now = Date.now();
+    const diff = now - lastSuccessfulRefresh;
+
+    if (diff > 4000) {
+      clearInterval(refreshInterval);
+      clearInterval(restingInterval);
+
+      const isDark = document.documentElement.classList.contains('dark');
+      document.body.innerHTML = `
+        <div class="w-full h-screen flex items-center justify-center ${isDark ? 'bg-red-900/30' : 'bg-red-50'}">
+          <div class="text-center">
+            <h1 class="text-3xl font-bold ${isDark ? 'text-red-400' : 'text-red-600'} mb-4">Connection Lost</h1>
+            <p class="${isDark ? 'text-gray-300' : 'text-gray-700'} mb-6">
+              No successful updates for ${Math.floor(diff / 1000)} seconds.
+            </p>
+            <button onclick="location.reload()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+              Reload
+            </button>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  setInterval(watchdog, 500);
 
 </script>
 

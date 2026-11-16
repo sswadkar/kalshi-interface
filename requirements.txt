@@ -10,3 +10,4 @@ datetime==5.5
 fastapi
 uvicorn
 pandas
+numpy

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kalshi LP Farmer</title>
+<style>
+  :root { --bg:#0e1117; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --mut:#8b949e;
+          --grn:#2ea043; --red:#da3633; --amb:#d29922; --blu:#388bfd; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--border); }
+  header h1 { font-size:16px; margin:0; }
+  header a { color:var(--mut); text-decoration:none; margin-right:12px; }
+  header a:hover { color:var(--fg); }
+  .wrap { padding:20px; max-width:1200px; margin:0 auto; }
+  .banner { padding:10px 16px; border-radius:8px; margin-bottom:16px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+  .banner.live { background:#3d1418; border:1px solid var(--red); }
+  .banner.dry { background:#132a17; border:1px solid var(--grn); }
+  .panic { background:var(--red); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:700; cursor:pointer; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px; }
+  .card .k { color:var(--mut); font-size:12px; } .card .v { font-size:20px; font-weight:700; margin-top:4px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:16px; }
+  .panel h2 { font-size:14px; margin:0 0 12px; }
+  label { display:inline-flex; flex-direction:column; font-size:12px; color:var(--mut); margin:0 12px 10px 0; }
+  input,select { background:#0d1117; border:1px solid var(--border); color:var(--fg); border-radius:5px; padding:5px 8px; margin-top:3px; }
+  input[type=number] { width:90px; }
+  button.act { background:var(--blu); color:#fff; border:none; padding:6px 12px; border-radius:5px; cursor:pointer; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
+  th { color:var(--mut); font-weight:600; }
+  .tag { padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; }
+  .SAFE{background:#132a17;color:#3fb950;} .WEATHER{background:#3a2d10;color:#d29922;} .NEWS{background:#3d1418;color:#f85149;}
+  .toggle { cursor:pointer; }
+  .log { max-height:220px; overflow:auto; font:12px ui-monospace,monospace; }
+  .log div { padding:2px 0; border-bottom:1px solid #21262d; }
+  .mut { color:var(--mut); } .scroll { overflow-x:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ LP Farmer</h1>
+  <nav><a href="/">Dashboard</a><a href="/arbitrage">Arbitrage</a><a href="/liquidity" style="color:var(--fg)">Liquidity</a><a href="/performance">Performance</a></nav>
+</header>
+<div class="wrap">
+
+  <div id="banner" class="banner dry">
+    <span id="bannerText">loading…</span>
+    <button class="panic" onclick="panic()">🛑 PANIC — cancel all &amp; disable</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="k">Lifetime LP rewards (est)</div><div class="v" id="mRewLife" style="color:#3fb950">–</div></div>
+    <div class="card"><div class="k">LP rewards $/day (all orders)</div><div class="v" id="mRewDay" style="color:#3fb950">–</div></div>
+    <div class="card"><div class="k">Total portfolio value</div><div class="v" id="mPortTotal">–</div></div>
+    <div class="card"><div class="k">Free cash</div><div class="v" id="mPortCash">–</div></div>
+    <div class="card"><div class="k">Position value</div><div class="v" id="mPortPos">–</div></div>
+    <div class="card"><div class="k">Committed capital <span class="mut">(wing)</span></div><div class="v" id="mCap">–</div></div>
+    <div class="card"><div class="k">Open inventory ($) <span class="mut">(wing)</span></div><div class="v" id="mInv">–</div></div>
+    <div class="card"><div class="k">Realized P&amp;L <span class="mut">(wing)</span></div><div class="v" id="mPnl">–</div></div>
+    <div class="card"><div class="k">Resting orders <span class="mut">(wing)</span></div><div class="v" id="mOrd">–</div></div>
+    <div class="card"><div class="k">Markets enabled</div><div class="v" id="mMkt">–</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>All resting orders — fill-risk monitor <span class="mut" id="restingSummary"></span></h2>
+    <p class="mut" style="margin:0 0 8px">Every resting order on the account (all wings + manual), grouped by event.
+      🟣 ONLY = you're the entire top-of-book quote (no one else at that price) · 🔴 FIRST = first in line (queue ahead = 0) ·
+      🟡 = at the top of book but behind queue depth. "reset" cancels &amp; re-places the order (maker-only) to push it to the back of the queue.</p>
+    <div class="scroll" id="restingMonitor"><span class="mut">loading…</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>Global settings</h2>
+    <div id="settings"></div>
+    <button class="act" onclick="saveSettings()">Save settings</button>
+  </div>
+
+  <div class="panel">
+    <h2>Market scanner <span class="mut">— rank incentivized markets by farmable EV (upper bound)</span></h2>
+    <label>Series (comma-sep)<input id="scanSeries" placeholder="KXGDPYEAR,KXTEMPNYCH"></label>
+    <label>Tickers (comma-sep)<input id="scanTickers" placeholder=""></label>
+    <label>My size<input type="number" id="scanSize" value="100"></label>
+    <button class="act" onclick="runScan()">Scan</button>
+    <div class="scroll"><table id="scanTable"></table></div>
+  </div>
+
+  <div class="panel">
+    <h2>My markets</h2>
+    <div style="margin-bottom:10px">
+      <label>Add ticker<input id="newTicker" placeholder="KXGDPYEAR-32-B3.8"></label>
+      <button class="act" onclick="addMarket()">Add</button>
+    </div>
+    <div class="scroll"><table id="mktTable"></table></div>
+  </div>
+
+  <div class="panel">
+    <h2>Resting orders</h2>
+    <div class="scroll"><table id="orderTable"></table></div>
+  </div>
+
+  <div class="panel">
+    <h2>Activity log</h2>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+const SETTING_FIELDS = [
+  ["enabled","Wing enabled","bool"], ["dry_run","Dry run","bool"],
+  ["risk_level","Risk","select:conservative,moderate,aggressive"],
+  ["capital_budget","Capital $","num"], ["max_daily_loss","Max daily loss $","num"],
+  ["max_inventory_dollars","Max inventory $","num"],
+  ["requeue_mode","Re-queue mode","select:both,timer,queue,off"],
+  ["requeue_interval_s","Re-queue every (s)","num"],
+  ["requeue_queue_threshold","Re-queue when ahead <","num"],
+  ["min_order_lifetime_s","Min order life (s)","num"],
+];
+let S = {};
+
+function renderSettings() {
+  const el = document.getElementById("settings"); el.innerHTML = "";
+  for (const [key,label,type] of SETTING_FIELDS) {
+    const v = S.settings[key];
+    let inp;
+    if (type==="bool") inp = `<input type="checkbox" data-k="${key}" ${v?"checked":""}>`;
+    else if (type.startsWith("select:")) {
+      const opts = type.split(":")[1].split(",").map(o=>`<option ${o==v?"selected":""}>${o}</option>`).join("");
+      inp = `<select data-k="${key}">${opts}</select>`;
+    } else inp = `<input type="number" data-k="${key}" value="${v}">`;
+    el.insertAdjacentHTML("beforeend", `<label>${label}${inp}</label>`);
+  }
+}
+function collectSettings() {
+  const out = {};
+  document.querySelectorAll("#settings [data-k]").forEach(i=>{
+    out[i.dataset.k] = i.type==="checkbox" ? i.checked : (i.type==="number" ? parseFloat(i.value) : i.value);
+  });
+  return out;
+}
+async function saveSettings() {
+  await fetch("/api/lp/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectSettings())});
+  refresh();
+}
+async function panic(){ if(confirm("Cancel ALL LP orders and disable the wing?")){ await fetch("/api/lp/panic",{method:"POST"}); refresh(); } }
+
+async function runScan(){
+  const q = new URLSearchParams({series:scanSeries.value, tickers:scanTickers.value, my_size:scanSize.value});
+  scanTable.innerHTML = "<tr><td class='mut'>scanning…</td></tr>";
+  const r = await (await fetch("/api/lp/scan?"+q)).json();
+  const rows = r.rows||[];
+  scanTable.innerHTML = "<tr><th>ticker</th><th>risk</th><th>2s</th><th>pool$/d</th><th>cheap</th><th>ref¢</th><th>maxEV$/d</th><th></th></tr>" +
+    rows.map(x=>`<tr><td>${x.ticker}</td><td><span class="tag ${x.risk}">${x.risk}</span></td>
+      <td>${x.two_sided?"✓":"✗"}</td><td>${x.daily_dollars.toFixed(2)}</td><td>${x.cheap_side}</td>
+      <td>${Math.round(x.cheap_ref_price*100)}</td><td>${x.est_daily.toFixed(2)}</td>
+      <td><button class="act" onclick="addMarket('${x.ticker}')">add</button></td></tr>`).join("");
+}
+
+async function addMarket(t){
+  const ticker = t || newTicker.value;
+  if(!ticker) return;
+  await fetch("/api/lp/markets",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ticker})});
+  newTicker.value=""; refresh();
+}
+async function updMarket(ticker, patch){
+  await fetch("/api/lp/markets/"+encodeURIComponent(ticker),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(patch)});
+  refresh();
+}
+async function delMarket(ticker){ await fetch("/api/lp/markets/"+encodeURIComponent(ticker),{method:"DELETE"}); refresh(); }
+
+function renderMarkets(){
+  const rows = S.markets||[];
+  mktTable.innerHTML = "<tr><th>on</th><th>ticker</th><th>sides</th><th>size</th><th>yes≤¢</th><th>no≤¢</th><th>flatten</th><th>score(c·s)</th><th></th></tr>" +
+    rows.map(m=>{
+      const sc = (S.score_accrued&&S.score_accrued[m.ticker])||0;
+      return `<tr>
+        <td><input type="checkbox" class="toggle" ${m.enabled?"checked":""} onchange="updMarket('${m.ticker}',{enabled:this.checked})"></td>
+        <td>${m.ticker}</td>
+        <td><select onchange="updMarket('${m.ticker}',{sides:this.value})">
+          ${["both","yes","no"].map(s=>`<option ${s==m.sides?"selected":""}>${s}</option>`).join("")}</select></td>
+        <td><input type="number" value="${m.size}" style="width:70px" onchange="updMarket('${m.ticker}',{size:parseInt(this.value)})"></td>
+        <td><input type="number" value="${m.yes_max_bid}" style="width:60px" onchange="updMarket('${m.ticker}',{yes_max_bid:parseInt(this.value)})"></td>
+        <td><input type="number" value="${m.no_max_bid}" style="width:60px" onchange="updMarket('${m.ticker}',{no_max_bid:parseInt(this.value)})"></td>
+        <td><input type="number" value="${m.flatten_band}" style="width:70px" onchange="updMarket('${m.ticker}',{flatten_band:parseInt(this.value)})"></td>
+        <td>${sc.toFixed(0)}</td>
+        <td><button class="act" style="background:var(--red)" onclick="delMarket('${m.ticker}')">×</button></td>
+      </tr>`;}).join("");
+}
+function renderOrders(){
+  const o = S.orders||[];
+  orderTable.innerHTML = "<tr><th>ticker</th><th>side</th><th>price¢</th><th>size</th><th>rem</th><th>status</th></tr>" +
+    (o.length? o.map(x=>`<tr><td>${x.ticker}</td><td>${x.bid_side}</td><td>${x.price_cents}</td><td>${x.size}</td><td>${x.remaining}</td><td>${x.status}</td></tr>`).join("")
+     : "<tr><td class='mut' colspan=6>no resting LP orders</td></tr>");
+}
+function renderBanner(){
+  const b=document.getElementById("banner"), t=document.getElementById("bannerText");
+  const dry=S.settings.dry_run, on=S.settings.enabled;
+  b.className = "banner "+(dry?"dry":"live");
+  t.textContent = (dry?"🔸 DRY RUN — no real orders":"🔴 LIVE — real orders on PROD") + " · Wing " + (on?"ENABLED":"disabled");
+}
+
+async function refresh(){
+  try{
+    S = await (await fetch("/api/lp/status")).json();
+    renderBanner(); renderSettings(); renderMarkets(); renderOrders();
+    mCap.textContent = "$"+S.committed_capital; mInv.textContent = "$"+S.inventory_dollars;
+    mPnl.textContent = "$"+S.realized_pnl; document.getElementById("mOrd").textContent = (S.orders||[]).length;
+    mMkt.textContent = (S.markets||[]).filter(m=>m.enabled).length;
+    const rw = S.rewards||{};
+    document.getElementById("mRewLife").textContent = "$"+((rw.lifetime_est||0).toFixed(2));
+    const pf = S.portfolio||{};
+    const fmt = v => v==null ? "–" : "$"+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById("mPortTotal").textContent = fmt(pf.total_value);
+    document.getElementById("mPortCash").textContent  = fmt(pf.cash);
+    document.getElementById("mPortPos").textContent   = fmt(pf.position_value);
+    log.innerHTML = (S.messages||[]).slice(0,50).map(m=>`<div><span class="mut">${(m.timestamp||"").slice(11,19)}</span> ${m.type}: ${m.text}</div>`).join("");
+  }catch(e){ document.getElementById("bannerText").textContent="⚠️ server unreachable"; }
+}
+async function refreshResting(){
+  const box = document.getElementById("restingMonitor");
+  try{
+    const j = await (await fetch("/api/orders/all_resting")).json();
+    const orders = j.orders || [];
+    document.getElementById("restingSummary").textContent =
+      `— ${j.count||0} resting · ${j.at_top||0} at top · ~$${(j.reward_daily_total||0).toFixed(2)}/day LP rewards (${j.incentivized_count||0} incentivized)`;
+    // the $/day card uses this live account-wide total (fresher than the 5-min accumulator)
+    const dcard = document.getElementById("mRewDay");
+    if(dcard) dcard.textContent = "$"+((j.reward_daily_total||0).toFixed(2))+"/d";
+    // group by event (server already sorts by event)
+    const groups = {};
+    for(const o of orders){ (groups[o.event] = groups[o.event] || []).push(o); }
+    let html = "";
+    for(const ev of Object.keys(groups)){
+      const os = groups[ev];
+      // riskiest first within the event: ONLY, then FIRST, then at-top with least queue ahead
+      const rank = o => o.only ? 0 : (o.at_top && o.queue_ahead===0 ? 1 : (o.at_top ? 2 : 3));
+      os.sort((a,b)=> rank(a)-rank(b) || ((a.queue_ahead??1e12)-(b.queue_ahead??1e12)));
+      const tops = os.filter(o=>o.at_top).length;
+      const evRew = os.reduce((s,o)=> s + (o.reward_daily||0), 0);
+      html += `<div style="margin-top:12px;font-weight:600">${ev} <span class="mut">(${os.length} order${os.length>1?"s":""}${tops?`, ${tops} at top`:""})</span>`
+            + (evRew>0 ? ` <span style="color:#3fb950">~$${evRew.toFixed(2)}/day</span>` : "") + `</div>`;
+      html += "<table><tr><th></th><th>market</th><th>order</th><th>price¢</th><th>best¢</th><th>queue ahead</th><th>remaining</th><th>queue behind</th><th>$/day</th><th></th></tr>";
+      for(const o of os){
+        let warn="", style="";
+        if(o.only){ warn="🟣 ONLY"; style="color:#a371f7;font-weight:600"; }
+        else if(o.at_top && o.queue_ahead===0){ warn="🔴 FIRST"; style="color:#f85149;font-weight:600"; }
+        else if(o.at_top){ warn="🟡 top"; style="color:#d29922"; }
+        const qa = (!o.at_top) ? "—" : (o.queue_ahead==null ? "?" : Math.round(o.queue_ahead).toLocaleString());
+        const qb = (!o.at_top || o.queue_ahead==null || o.level_size==null) ? "—"
+                 : Math.max(0, Math.round(o.level_size - o.queue_ahead - o.remaining)).toLocaleString();
+        const rew = (o.reward_daily==null) ? `<span class="mut">—</span>`
+                  : (o.reward_daily>0 ? `<span style="color:#3fb950">$${o.reward_daily.toFixed(2)}</span>` : `<span class="mut">$0</span>`);
+        const btn = o.is_lp
+          ? `<span class="mut" title="the liquidity engine re-queues its own orders">auto</span>`
+          : `<button class="act" style="padding:2px 8px" onclick="resetOrder('${o.order_id}', this)">reset</button>`;
+        html += `<tr>
+          <td style="${style}">${warn}</td>
+          <td title="${(o.title||"").replace(/"/g,"'")}">${o.ticker}${o.sub_title?` <span class="mut">${o.sub_title}</span>`:""}</td>
+          <td>${o.action} ${o.side}</td>
+          <td style="${style}">${o.price}</td>
+          <td>${o.best}</td>
+          <td style="${style}">${qa}</td>
+          <td>${Math.round(o.remaining).toLocaleString()}${o.only?` <span class="mut">(whole level)</span>`:""}</td>
+          <td class="mut">${qb}</td>
+          <td>${rew}</td>
+          <td>${btn}</td>
+        </tr>`;
+      }
+      html += "</table>";
+    }
+    box.innerHTML = html || "<span class='mut'>no resting orders</span>";
+  }catch(e){ box.innerHTML = "<span class='mut'>⚠️ could not load resting orders</span>"; }
+}
+
+async function resetOrder(orderId, btn){
+  if(btn){ btn.disabled = true; btn.textContent = "…"; }
+  try{
+    const r = await (await fetch("/api/orders/reset/"+orderId, {method:"POST"})).json();
+    if(r.error){ if(btn){ btn.textContent="✗"; btn.title=r.error; } }
+  }catch(e){ if(btn){ btn.textContent="✗"; } }
+  refreshResting();  // re-pull to show the new queue position
+}
+
+refresh(); setInterval(refresh, 2000);
+refreshResting(); setInterval(refreshResting, 10000);
+</script>
+</body>
+</html>

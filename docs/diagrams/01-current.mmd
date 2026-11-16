@@ -1,0 +1,78 @@
+flowchart TB
+    subgraph browser["Browser — four pages; JavaScript polls HTTP endpoints"]
+        Dashboard["index.html<br/>Manual trading and positions"]
+        ArbitrageUI["arbitrage.html<br/>Groups, opportunities, auto-arb"]
+        LiquidityUI["liquidity.html<br/>Scanner, orders, LP controls"]
+        PerformanceUI["performance.html<br/>Value history and reward estimates"]
+    end
+
+    subgraph process["November 11 prototype — before the local reorganization"]
+        subgraph server["server.py — 1,458 lines; 26 API routes plus 4 page routes"]
+            Routes["FastAPI routes<br/>No application authentication"]
+            Startup["lifespan()<br/>Starts five background tasks"]
+            Manual["Manual buy / sell / cancel / reset<br/>Order conversion and direct submission"]
+            Arb["Arbitrage groups, scanning and execution<br/>Sequential two-leg submissions"]
+            LPAPI["LP settings, scan and panic routes"]
+            Monitor["Account-wide resting-order monitor<br/>Books, queue position and reward rate"]
+            Portfolio["Portfolio cache, history, reward integration<br/>Hardcoded backfill and estimated pending rewards"]
+            Shared["Mutable dictionaries<br/>state, arb_state, global_settings, caches"]
+        end
+        Positions["kalshi_positions.py<br/>Auth + synchronous HTTP + market reads<br/>Position and valuation calculations"]
+        Maker["liquidity_maker.py<br/>Quote decisions + placement / cancellation<br/>Inventory, simulation, limits and startup cleanup"]
+        Analytics["liquidity_analytics.py<br/>Program discovery + book reads<br/>Qualification math and reward estimates"]
+        Stream["liquidity_ws.py / LiquidityWS<br/>Authenticated connection, subscriptions<br/>Sequence check, reconnect and callbacks"]
+        Book["MarketBook in liquidity_ws.py<br/>YES / NO bid levels and trade tape"]
+        LPMemory["LP memory<br/>Orders, inventory, cost basis, P&L<br/>Separate LP dry_run setting"]
+    end
+
+    subgraph disk["Local disk"]
+        ArbJSON[("arbitrage_groups.json")]
+        LPJSON[("liquidity_config.json")]
+        History[("lp_rewards_history.json<br/>portfolio_history.json")]
+        Credentials[".env + private-key files<br/>Loaded at import; tracked in this checkout"]
+    end
+    REST["Kalshi REST API<br/>Markets, positions, orders, balance, incentives"]
+    WS["Kalshi WebSocket API<br/>Book snapshots / deltas, trades<br/>Private fills and order updates"]
+    Gaps["Prototype gaps<br/>Several execution paths and two dry-run flags<br/>No durable order / fill ledger or automated suite<br/>Existing snapshots can remain usable after disconnect"]
+
+    Dashboard & ArbitrageUI & LiquidityUI & PerformanceUI --> Routes
+    Routes --> Manual & Arb & LPAPI & Monitor & Portfolio
+    Startup -->|market / position and resting-order polling| Shared
+    Startup -->|arbitrage polling| Arb
+    Startup -->|LP run loop| Maker
+    Startup -->|reward polling| Portfolio
+    Shared <--> Positions
+    Manual --> Positions
+    Arb --> Positions
+    Arb <--> Shared
+    Manual <--> Shared
+    LPAPI --> Maker & Analytics
+    Monitor --> Positions & Analytics
+    Portfolio --> Positions & Analytics
+    Portfolio -->|reads program metadata| Maker
+    Maker --> Positions & Analytics
+    Maker -->|starts connection| Stream
+    Stream -->|snapshots / deltas| Book
+    Book -->|quote inputs| Maker
+    Stream -->|fills, order updates, simulated-fill trade input| Maker
+    Maker <--> LPMemory
+    Analytics --> Positions
+    Positions <-->|signed HTTPS| REST
+    Stream <-->|authenticated stream| WS
+    Credentials --> Positions & Stream
+    Arb <--> ArbJSON
+    Maker <--> LPJSON
+    Portfolio <--> History
+    Gaps -.-> Manual
+    Gaps -.-> Maker
+
+    classDef ui fill:#eaf0ff,stroke:#4f6bdc,color:#172554
+    classDef code fill:#eff8f6,stroke:#278579,color:#143e38
+    classDef state fill:#fff5de,stroke:#b68a22,color:#583f0d
+    classDef external fill:#f0f1f5,stroke:#737b8b,color:#242d3b
+    classDef warning fill:#fff0ef,stroke:#c55a51,color:#6d2621
+    class Dashboard,ArbitrageUI,LiquidityUI,PerformanceUI ui
+    class Routes,Startup,Manual,Arb,LPAPI,Monitor,Portfolio,Positions,Maker,Analytics,Stream,Book code
+    class Shared,LPMemory,ArbJSON,LPJSON,History state
+    class REST,WS external
+    class Gaps,Credentials warning

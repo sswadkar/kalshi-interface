@@ -1,12 +1,12 @@
+# Runtime dependencies (installed by `pip install -e .` and the Docker image).
+# Versions are the ones the offline test suite passes with.
+fastapi==0.165.0
+pydantic==2.14.4
+uvicorn==0.54.0
 requests==2.32.3
-python-dateutil==2.9.0.post0
-cryptography==44.0.2
 urllib3==2.3.0
-httpx
-kalshi-python
-python-dotenv==1.0.1
+cryptography==44.0.2
 websockets==14.1
-datetime==5.5
-fastapi
-uvicorn
-pandas
+python-dotenv==1.0.1
+pandas==3.1.1
+numpy==2.4.6

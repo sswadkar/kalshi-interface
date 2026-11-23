@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Liquidity · Kalshi Workstation</title>
+  <script src="/static/workstation.js"></script>
+  <link rel="stylesheet" href="/static/workstation.css">
+  <script src="/static/liquidity.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to workspace</a>
+  <header class="topbar"><div class="topbar-inner">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">K</span> Workstation</div>
+    <nav aria-label="Workspaces"><a href="/">Live trader</a><a href="/arbitrage">Arbitrage</a><a href="/liquidity" aria-current="page">Liquidity</a></nav>
+    <button class="theme-toggle quiet" id="themeToggle" type="button">Light mode</button>
+  </div></header>
+  <main id="main">
+    <div class="page-heading">
+      <div><div class="eyebrow">Kalshi / Liquidity</div><h1>Liquidity monitor</h1><p>Where your resting orders sit in the book, and which incentive programs pay for resting orders.</p></div>
+      <span id="connectionStatus" class="pill" role="status">Connecting…</span>
+    </div>
+    <div id="connectionNotice" class="notice warning" role="status" hidden></div>
+    <div id="actionNotice" class="notice" role="status" aria-live="polite" hidden></div>
+    <dl class="metrics">
+      <div class="metric"><dt>Resting orders</dt><dd id="orderCount">—</dd></div>
+      <div class="metric"><dt>At top of book</dt><dd id="topCount">—</dd></div>
+      <div class="metric"><dt>In incentive programs</dt><dd id="incentivizedCount">—</dd></div>
+      <div class="metric"><dt>Estimated rewards / day</dt><dd id="rewardTotal">—</dd></div>
+    </dl>
+    <section class="panel" aria-labelledby="ordersHeading">
+      <div class="panel-heading"><div><h2 id="ordersHeading">Resting orders</h2><p>Every resting order on the account, grouped by event. Prices in cents.</p></div><span id="ordersState" class="hint">Loading…</span></div>
+      <div id="orders"><div class="empty">Loading orders…</div></div>
+      <p class="section-note"><b>At top</b>: the order is at the best price, so it fills before anything worse. <b>Next to fill</b>: nothing is queued ahead of it. <b>Only quote</b>: it is the entire best price level. Requeue cancels and re-places the same post-only order, which moves it to the back of its price level.</p>
+    </section>
+    <section class="panel" aria-labelledby="scanHeading">
+      <div class="panel-heading"><div><h2 id="scanHeading">Incentive scanner</h2><p>Rank markets in Kalshi's liquidity incentive program by estimated daily reward.</p></div></div>
+      <form id="scanForm" class="panel-body ticket">
+        <label class="field">Series<input name="series" placeholder="e.g. KXCPI, KXGDP" autocomplete="off"></label>
+        <label class="field">Tickers<input name="tickers" placeholder="optional" autocomplete="off"></label>
+        <label class="field">Size (contracts)<input name="my_size" type="number" min="1" step="1" value="100" required></label>
+        <button type="submit" class="primary" data-mutation>Scan</button>
+      </form>
+      <div id="scanResults" class="table-scroll"><div class="empty">Run a scan to rank incentivized markets.</div></div>
+      <p class="section-note">Estimates are upper bounds: they assume your size keeps its full share of the cheaper side's reward pool, with no new competition and no losses from being filled.</p>
+    </section>
+    <footer class="footer"><span>Prices in cents · rewards in USD per day (estimates)</span><span>API connectivity does not guarantee fresh exchange quotes.</span></footer>
+  </main>
+  <dialog id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmDescription">
+    <form method="dialog"><h2 id="confirmTitle">Confirm action</h2><p id="confirmDescription"></p>
+      <div class="dialog-actions"><button value="cancel" autofocus>Cancel</button><button id="confirmAccept" value="confirm" class="primary">Confirm</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

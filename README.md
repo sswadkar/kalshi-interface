@@ -87,21 +87,26 @@ You need Python 3.11+ and a Kalshi API key. Create the key in your Kalshi accoun
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
-cp -n .env.example .env     # then fill in your key ID, key file path, and an event ticker
+cp -n .env.example .env                   # then fill in your key ID and key file path
+cp -n config.example.json config.json     # then set the event to trade
 ```
+
+Credentials go in `.env`:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ENV` | `DEMO` | Exchange: `DEMO` or `PROD` |
-| `DRY_RUN` | `true` | Simulate manual and arbitrage orders; only `false` sends them |
 | `DEMO_KEYID`, `DEMO_KEYFILE` | | API key ID and the path to its private key, absolute or relative to the repository root (`PROD_…` for production) |
-| `EVENT_TICKER` | | Event shown in the live trader |
-| `KALSHI_DATA_DIR` | repository root | Existing directory where settings are saved |
-| `KALSHI_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Host names your browser may use to reach the server |
-| `KALSHI_READS_PER_SECOND`, `KALSHI_WRITES_PER_SECOND` | `15`, `8` | Request budgets; raise only for a higher API tier |
-| `KALSHI_LOG_LEVEL` | `INFO` | Server log level |
+| `KALSHI_DATA_DIR` | repository root | Existing directory for `config.json` and saved settings |
 
-Dry run still reads live market data, so it needs credentials.
+App settings go in `config.json`, in the data directory:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `event_ticker` | | Event shown in the live trader |
+| `dry_run` | `true` | Simulate manual and arbitrage orders; only `false` sends them |
+
+Dry run still reads live market data, so it needs credentials. Request budgets, allowed host names, and the log level are constants in [config.py](src/kalshi_workstation/config.py).
 
 ## Running the server
 
@@ -111,7 +116,7 @@ uvicorn kalshi_workstation.app:app --host 127.0.0.1 --port 8000
 
 `python server.py` starts the same app on the same address. Open <http://127.0.0.1:8000>. Run a single worker, because extra workers would run every background job twice. Keep the server on `127.0.0.1`, since it has no login.
 
-With Docker, set the key path in `.env` to the path inside the container (for example `DEMO_KEYFILE=/keys/demo.pem`):
+With Docker, set the key path in `.env` to the path inside the container (for example `DEMO_KEYFILE=/keys/demo.pem`) and put `config.json` in `./data`:
 
 ```bash
 docker build -t kalshi-workstation .
@@ -216,7 +221,7 @@ NODE_PATH=/tmp/kalshi-ui-tools/node_modules node tests/browser/workstation.cjs
 The reasoning behind these is in [docs/design-decisions.md](docs/design-decisions.md):
 
 - [Orders are sent exactly once](docs/design-decisions.md#sending-orders); only reads and cancellations retry.
-- [Requests stay under Kalshi's rate limits](docs/design-decisions.md#rate-limits) by budgeting them client-side, after an early version was rate-limited on page load.
+- [Requests stay under Kalshi's rate limits](docs/design-decisions.md#rate-limits) by budgeting them client-side, since a rate-limited order can't safely be retried.
 - [Blocking exchange calls run in worker threads](docs/design-decisions.md#concurrency), and pairs execute one at a time.
 - [Other websites can't drive the server](docs/design-decisions.md#requests-from-other-websites), even though it has no login.
 - [Prices are integer cents](docs/design-decisions.md#units) from the moment they arrive.

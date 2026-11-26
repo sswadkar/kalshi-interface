@@ -11,10 +11,7 @@ _test_data = tempfile.TemporaryDirectory(prefix="kalshi-tests-")
 os.environ["KALSHI_ENV_FILE"] = str(Path(_test_data.name) / "absent.env")
 os.environ["KALSHI_DATA_DIR"] = _test_data.name
 os.environ["ENV"] = "DEMO"
-os.environ["DRY_RUN"] = "true"
-# The test client addresses requests to http://testserver.
-os.environ["KALSHI_ALLOWED_HOSTS"] = "localhost,127.0.0.1,testserver"
-for name in ("DEMO_KEYID", "DEMO_KEYFILE", "PROD_KEYID", "PROD_KEYFILE", "EVENT_TICKER"):
+for name in ("DEMO_KEYID", "DEMO_KEYFILE", "PROD_KEYID", "PROD_KEYFILE"):
     os.environ.pop(name, None)
 
 SYNTHETIC_MARKET = {"market_ticker": "SYNTHETIC", "yes_ask": 60, "yes_bid": 58,
@@ -33,7 +30,10 @@ def deny_network(monkeypatch):
 def app(tmp_path):
     """A fresh application whose configuration files live in an empty directory."""
     from kalshi_workstation.app import create_app
-    application = create_app(data_dir=tmp_path, dry_run=True, event_ticker="SYNTHETIC-EVENT")
+    from kalshi_workstation.config import ALLOWED_HOSTS
+    # The test client addresses requests to http://testserver.
+    application = create_app(data_dir=tmp_path, allowed_hosts=[*ALLOWED_HOSTS, "testserver"],
+                             dry_run=True, event_ticker="SYNTHETIC-EVENT")
     application.state.live_trading.markets = [dict(SYNTHETIC_MARKET)]
     return application
 

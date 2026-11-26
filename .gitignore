@@ -32,6 +32,7 @@ api_keys/
 
 # Runtime state written by the app: strategy configuration, logs, local data
 arbitrage_groups.json
+config.json
 *_config.json
 data/
 logs/

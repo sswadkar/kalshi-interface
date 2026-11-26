@@ -20,6 +20,7 @@ api_keys
 *.p12
 *.pfx
 arbitrage_groups.json
+config.json
 *_config.json
 data
 logs

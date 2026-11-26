@@ -1,4 +1,6 @@
-"""Shared balance cache, cents conversions, and batched market requests."""
+"""Shared balance cache, cents conversions, batched market requests, and settings."""
+import json
+
 import pandas as pd
 import pytest
 
@@ -92,11 +94,28 @@ def test_positions_report_average_price_in_cents_and_values_in_dollars(monkeypat
     assert row["liquidation_value"] == 6.1
 
 
-@pytest.mark.parametrize("value,expected", [(None, True), ("", True), ("true", True),
-                                            ("TRUE", True), ("false", False), ("no", False)])
-def test_dry_run_defaults_to_simulation(monkeypatch, value, expected):
-    if value is None:
-        monkeypatch.delenv("DRY_RUN", raising=False)
-    else:
-        monkeypatch.setenv("DRY_RUN", value)
-    assert config.env_flag("DRY_RUN", default=True) is expected
+@pytest.mark.parametrize("contents,expected", [
+    (None, True),                       # no config.json
+    ({}, True),                         # file without the key
+    ({"dry_run": True}, True),
+    ({"dry_run": "false"}, True),       # a string is a typo, not a decision
+    ({"dry_run": 0}, True),
+    ({"dry_run": False}, False),        # only an explicit false sends orders
+])
+def test_dry_run_stays_on_unless_explicitly_false(tmp_path, contents, expected):
+    path = tmp_path / "config.json"
+    if contents is not None:
+        path.write_text(json.dumps(contents))
+    assert config.load_settings(path)["dry_run"] is expected
+
+
+def test_settings_file_supplies_the_event_and_rejects_mistakes(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"event_ticker": "KXEVENT-1"}))
+    assert config.load_settings(path) == {"event_ticker": "KXEVENT-1", "dry_run": True}
+    path.write_text(json.dumps({"event_tikcer": "KXEVENT-1"}))
+    with pytest.raises(RuntimeError, match="Unknown setting"):
+        config.load_settings(path)
+    path.write_text("{not json")
+    with pytest.raises(RuntimeError, match="Could not read"):
+        config.load_settings(path)

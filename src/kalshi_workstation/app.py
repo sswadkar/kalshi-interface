@@ -47,7 +47,9 @@ def create_app(*, data_dir=DATA_DIR, allowed_hosts=ALLOWED_HOSTS, dry_run=DRY_RU
     state.programs = ProgramCatalog()
     state.live_trading = LiveTrading(state.mode, state.portfolio, event_ticker)
     state.arbitrage = Arbitrage(state.mode, config_path=data_dir / "arbitrage_groups.json")
-    # Factories, not coroutines: looked up when the server starts.
+    # Each factory returns a coroutine that the runtime starts as its own asyncio task.
+    # Exchange calls inside a job run in worker threads (asyncio.to_thread), so a slow
+    # request never blocks another job or the API.
     state.background_jobs = [
         ("balance", lambda: state.portfolio.run()),
         ("liquidity-programs", lambda: state.programs.run()),

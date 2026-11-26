@@ -6,7 +6,7 @@ Most of these came from asking what happens when a request fails halfway with re
 
 ## Sending orders
 
-Dry run is on unless you set `DRY_RUN=false`. Automatic execution starts off, arbitrage groups start unverified, and turning any of those on asks for confirmation.
+Dry run is on unless `config.json` says exactly `"dry_run": false`; a missing file, a missing key, or a typo all leave it on. Automatic execution starts off, arbitrage groups start unverified, and turning any of those on asks for confirmation.
 
 An order request that times out may or may not have reached the exchange, and retrying it could double the position. So orders are sent exactly once. A gateway error on an order is logged as "outcome unknown" rather than as a failure, since it may well have filled. Reads and cancellations can safely repeat, so those retry with backoff when rate-limited. Every request has a connect and read timeout, so nothing waits on the exchange forever.
 
@@ -14,17 +14,15 @@ All order submission and cancellation goes through one module, `core/execution/s
 
 ## Rate limits
 
-The first version of this rewrite was rate-limited the moment the page opened. The balance was being polled from three places, and Kalshi allows one balance request per second with no burst. On the Basic tier the other limits are 20 reads and 10 writes per second ([rate limits](https://docs.kalshi.com/getting_started/rate_limits)). Now:
+Kalshi's Basic tier allows 20 reads and 10 writes per second, and the balance endpoint allows one request per second with no burst ([rate limits](https://docs.kalshi.com/getting_started/rate_limits)). A rejected read just retries, but a rejected order can't safely be retried (see above). So the client budgets requests before sending them instead of recovering afterwards:
 
-- every request draws from a client-side token bucket set below those limits (15 reads and 8 writes per second by default, and 1 per second for the balance);
-- one background job fetches the balance and every page reads the shared copy;
-- quotes for all markets in all arbitrage groups come from one batched request.
-
-Staying under the limit matters more than handling a 429 well, because an order can't be retried after one.
+- Every request waits on a client-side limiter ([pyrate-limiter](https://pypi.org/project/pyrate-limiter/)) set below those limits: at most 15 reads and 8 writes in any one-second window by default, and 1 for the balance.
+- The balance has the tightest limit and appears on several pages, so one background job fetches it and every page reads the shared copy.
+- Quotes for all markets in all arbitrage groups come from one batched request, so watching more markets doesn't raise the request rate.
 
 ## Concurrency
 
-Background jobs share one asyncio event loop, and the exchange client is synchronous (`requests` with a shared session), so exchange calls run in worker threads. Pair execution also runs in a thread, behind a lock, which keeps two pairs from interleaving while the rest of the API stays responsive.
+Each background job runs as its own asyncio task. The exchange client is synchronous (`requests` with a shared session), so every exchange call inside a job runs in a worker thread through `asyncio.to_thread`. The event loop never waits on the network, and a slow request in one job doesn't delay any other job or API request. Pair execution also runs in a thread, behind a lock, which keeps two pairs from interleaving while the rest of the API stays responsive.
 
 We considered an async HTTP client and decided against it. The order path is short, sequential, and easier to reason about as plain blocking code, and the threads keep it off the event loop anyway.
 

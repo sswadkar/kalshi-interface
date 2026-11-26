@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from kalshi_workstation.config import ENV, LOG_LEVEL
+from kalshi_workstation.config import ENV, LOG_LEVEL, RETIRED_ENV, SETTINGS_FILE
 
 logger = logging.getLogger("kalshi_workstation")
 
@@ -28,6 +28,10 @@ async def lifespan(app: FastAPI):
     logger.info("Starting: ENV=%s, manual/arbitrage dry_run=%s, auto_arb=%s, extensions=%s",
                 ENV, state.mode.dry_run, state.arbitrage.settings["auto_arb"],
                 ", ".join(state.extensions) or "none")
+    if RETIRED_ENV:
+        logger.warning("Ignoring %s from the environment: event_ticker and dry_run now live in "
+                       "%s, and the other values are fixed in config.py",
+                       ", ".join(RETIRED_ENV), SETTINGS_FILE)
     tasks = [asyncio.create_task(start(), name=name) for name, start in state.background_jobs]
     state.background_tasks = tasks
     try:

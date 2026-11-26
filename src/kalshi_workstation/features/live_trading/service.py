@@ -82,7 +82,7 @@ class LiveTrading:
 
     async def run_markets(self):
         if not self.event_ticker:
-            self.add_message("ERROR", "EVENT_TICKER is not set; the live trader has no markets to show.")
+            self.add_message("ERROR", "No event_ticker in config.json; the live trader has no markets to show.")
             return
         while True:
             try:

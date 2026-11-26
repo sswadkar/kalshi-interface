@@ -1,0 +1,28 @@
+# Only src/, static/, server.py and the dependency manifests are copied into the
+# image; this keeps everything else (especially credentials) out of the build context.
+.git
+.github
+.venv
+venv
+**/__pycache__
+**/*.egg-info
+.pytest_cache
+.ruff_cache
+tests
+scripts
+.env
+.env.*
+.envrc
+.aws
+api_keys
+*.pem
+*.key
+*.p12
+*.pfx
+arbitrage_groups.json
+*_config.json
+data
+logs
+*.log
+*.ipynb
+.DS_Store

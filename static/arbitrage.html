@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arbitrage · Kalshi Workstation</title>
+  <script src="/static/workstation.js"></script>
+  <link rel="stylesheet" href="/static/workstation.css">
+  <script src="/static/arbitrage.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to workspace</a>
+  <header class="topbar"><div class="topbar-inner">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">K</span> Workstation</div>
+    <nav aria-label="Workspaces"><a href="/">Live trader</a><a href="/arbitrage" aria-current="page">Arbitrage</a><a href="/liquidity">Liquidity</a></nav>
+    <button class="theme-toggle quiet" id="themeToggle" type="button">Light mode</button>
+  </div></header>
+  <main id="main">
+    <div class="page-heading">
+      <div><div class="eyebrow">Kalshi / Arbitrage</div><h1>Arbitrage</h1><p>Compare paired markets and review candidate trades.</p></div>
+      <span id="connectionStatus" class="pill" role="status">Connecting…</span>
+    </div>
+    <div class="mode-strip">
+      <div class="mode-description"><span id="modeBadge" class="pill">Mode unknown</span><span class="hint">Applies to manual and arbitrage orders. Cancelling a resting order is always live.</span></div>
+      <label class="check"><input type="checkbox" id="dryRun" data-mutation disabled> Dry run</label>
+    </div>
+    <div id="connectionNotice" class="notice warning" role="status" hidden></div>
+    <div id="actionNotice" class="notice" role="status" aria-live="polite" hidden></div>
+    <dl class="metrics">
+      <div class="metric"><dt>Account value</dt><dd id="totalValue">—</dd></div>
+      <div class="metric"><dt>Available cash</dt><dd id="cashValue">—</dd></div>
+      <div class="metric"><dt>Position value</dt><dd id="positionValue">—</dd></div>
+      <div class="metric"><dt>Last market poll</dt><dd id="lastPull" class="timestamp">Awaiting data</dd></div>
+    </dl>
+    <div class="arb-layout">
+      <div>
+        <section class="panel" aria-labelledby="candidateHeading">
+          <div class="panel-heading"><div><h2 id="candidateHeading">Trade candidates <span id="candidateCount" class="count"></span></h2><p>Gross edge before fees and execution buffer</p></div><span class="pill" id="autoState">Automation unknown</span></div>
+          <div id="opportunities"><div class="empty">Loading candidates…</div></div>
+          <p class="section-note">Matching payouts must be verified. Leg 2 is sent only after leg 1 fills, sized to leg 1’s fill; leg 2 can still fail or fill partially.</p>
+        </section>
+        <section class="panel" aria-labelledby="groupHeading">
+          <div class="panel-heading"><div><h2 id="groupHeading">Market groups <span id="groupCount" class="count"></span></h2><p>Group markets that describe the same underlying outcome.</p></div><button id="newGroup" class="small" data-mutation disabled>+ New group</button></div>
+          <div id="groups"><div class="empty">Loading groups…</div></div>
+        </section>
+        <section class="panel" aria-labelledby="activityHeading">
+          <div class="panel-heading"><h2 id="activityHeading">Activity</h2><span class="hint">Current session</span></div>
+          <div id="messages" class="activity"><div class="empty">Waiting for activity…</div></div>
+        </section>
+      </div>
+      <aside class="panel" aria-labelledby="settingsHeading">
+        <div class="panel-heading"><h2 id="settingsHeading">Strategy settings</h2></div>
+        <form id="settingsForm" class="panel-body settings-form">
+          <label class="field">Minimum gross edge (¢)<input data-mutation disabled name="threshold" type="number" min="0" step="1" required></label>
+          <label class="field">Price buffer per leg (¢)<input data-mutation disabled name="buffer" type="number" min="0" max="99" step="1" required><small>Added to each leg’s reference ask.</small></label>
+          <hr>
+          <label class="check"><input data-mutation disabled name="auto_arb" type="checkbox"><span>Automatic execution<small>Uses the saved quantity and current trading mode. Only groups with verified payouts are traded.</small></span></label>
+          <label class="field">Automatic quantity per leg<input data-mutation disabled name="auto_arb_quantity" type="number" min="1" step="1" required></label>
+          <label class="check"><input data-mutation disabled name="skip_confirmation" type="checkbox"><span>Skip manual confirmation<small>Candidate buttons submit immediately.</small></span></label>
+          <button type="submit" class="primary" data-mutation disabled>Save settings</button>
+          <p class="settings-state" id="settingsState" role="status">Loading settings…</p>
+        </form>
+      </aside>
+    </div>
+    <dialog id="editDialog" aria-labelledby="editTitle">
+      <form id="editForm">
+        <h2 id="editTitle">New group</h2>
+        <label class="field"><span id="editLabel">Group name</span><input id="editValue" maxlength="200" required autocomplete="off"></label>
+        <label class="check" id="reverseField" hidden><input id="editReverse" type="checkbox"><span>Reverse outcome (YES means the opposite)</span></label>
+        <p id="editError" class="dialog-error" role="alert" hidden></p>
+        <div class="dialog-actions"><button type="button" id="editCancel">Cancel</button><button type="submit" class="primary" data-mutation>Save</button></div>
+      </form>
+    </dialog>
+    <footer class="footer"><span>Quotes in cents · account values in USD</span><span>API connectivity does not guarantee fresh exchange quotes.</span></footer>
+  </main>
+  <dialog id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmDescription">
+    <form method="dialog"><h2 id="confirmTitle">Confirm action</h2><p id="confirmDescription"></p>
+      <div class="dialog-actions"><button value="cancel" autofocus>Cancel</button><button id="confirmAccept" value="confirm" class="primary">Confirm</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

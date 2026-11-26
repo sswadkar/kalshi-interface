@@ -1,4 +1,6 @@
 """HTTP adapter: rate limits, timeouts, 429 handling, and error responses."""
+import time
+
 import pytest
 import requests
 
@@ -35,8 +37,8 @@ class FakeSession:
 def exchange(monkeypatch):
     """Unsigned, unthrottled requests against a scripted session."""
     class Free:
-        def acquire(self):
-            pass
+        def try_acquire(self, name):
+            return True
     monkeypatch.setattr(kalshi, "kalshi_headers", lambda method, path: {})
     monkeypatch.setattr(kalshi, "LIMITERS", {name: Free() for name in kalshi.LIMITERS})
     sleeps = []
@@ -102,26 +104,23 @@ def test_requests_draw_from_the_matching_bucket(method, path, bucket):
     assert kalshi._bucket(method, path) == bucket
 
 
-def test_rate_limiter_spaces_requests_after_the_burst():
-    now = [0.0]
-    slept = []
+def test_each_bucket_admits_its_budget_and_no_more_within_a_second():
+    limiters = kalshi.build_limiters()
 
-    def sleep(seconds):
-        slept.append(seconds)
-        now[0] += seconds
+    def admitted(name, attempts):
+        return sum(limiters[name].try_acquire("test", blocking=False) for _ in range(attempts))
 
-    limiter = kalshi.RateLimiter(1, capacity=1, clock=lambda: now[0], sleep=sleep)
-    for _ in range(3):
-        limiter.acquire()
-    assert slept == [1.0, 1.0]  # balance bucket: one per second, no burst
+    assert admitted("balance", 3) == 1                                  # no burst
+    assert admitted("read", 30) == int(kalshi.READS_PER_SECOND)        # 15 by default
+    assert admitted("write", 30) == int(kalshi.WRITES_PER_SECOND)      # 8 by default
 
-    burst = kalshi.RateLimiter(10, clock=lambda: now[0], sleep=sleep)
-    slept.clear()
-    for _ in range(10):
-        burst.acquire()
-    assert slept == []
-    burst.acquire()
-    assert slept == [pytest.approx(0.1)]
+
+def test_a_full_bucket_blocks_until_the_window_passes():
+    limiter = kalshi.per_second(1)
+    limiter.try_acquire("test")
+    started = time.monotonic()
+    limiter.try_acquire("test")
+    assert 0.8 < time.monotonic() - started < 2.0
 
 
 def test_resting_orders_use_two_requests_and_cents(monkeypatch):
@@ -143,3 +142,22 @@ def test_resting_orders_use_two_requests_and_cents(monkeypatch):
     assert len(calls) == 2
     assert [(o["side"], o["price"], o["queue_position"], o["remaining"]) for o in orders] == [
         ("NO", 65, 12.0, 5.0), ("YES", 41, None, 2.0)]
+
+
+def test_every_request_waits_on_its_bucket_before_sending(exchange, monkeypatch):
+    session = exchange(FakeResponse(200, {}), FakeResponse(200, {}), FakeResponse(200, {}))
+    drawn = []
+
+    class Recording:
+        def __init__(self, name):
+            self.name = name
+
+        def try_acquire(self, key):
+            drawn.append((self.name, len(session.calls)))   # calls made before this draw
+            return True
+
+    monkeypatch.setattr(kalshi, "LIMITERS", {name: Recording(name) for name in kalshi.LIMITERS})
+    kalshi.get_balance()
+    kalshi.kalshi_post(kalshi.ORDER_V2_ENDPOINT, {"ticker": "A"})
+    kalshi.kalshi_get("/trade-api/v2/markets")
+    assert drawn == [("balance", 0), ("write", 1), ("read", 2)]

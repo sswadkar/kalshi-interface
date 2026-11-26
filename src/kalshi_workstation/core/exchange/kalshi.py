@@ -8,7 +8,6 @@ import base64
 import datetime
 import logging
 import os
-import threading
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -19,6 +18,7 @@ from requests.adapters import HTTPAdapter
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
+from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
 
 from kalshi_workstation.config import (
     BALANCE_PER_SECOND, ENV, PROJECT_ROOT, READS_PER_SECOND, WRITES_PER_SECOND,
@@ -35,37 +35,22 @@ TIMEOUT = (3.05, 10)
 MAX_429_RETRIES = 3
 
 
-class RateLimiter:
-    """Thread-safe token bucket. `acquire` blocks until one request may be sent."""
-
-    def __init__(self, rate: float, capacity: float | None = None,
-                 clock=time.monotonic, sleep=time.sleep):
-        self.rate = rate
-        self.capacity = capacity if capacity is not None else max(rate, 1.0)
-        self._tokens = self.capacity
-        self._clock, self._sleep = clock, sleep
-        self._updated = clock()
-        self._lock = threading.Lock()
-
-    def acquire(self):
-        while True:
-            with self._lock:
-                now = self._clock()
-                self._tokens = min(self.capacity, self._tokens + (now - self._updated) * self.rate)
-                self._updated = now
-                if self._tokens >= 1:
-                    self._tokens -= 1
-                    return
-                wait = (1 - self._tokens) / self.rate
-            self._sleep(wait)
+def per_second(limit: float) -> Limiter:
+    """At most `limit` requests in any one-second window. `try_acquire` blocks the
+    calling thread until a request may be sent, and is safe to share across threads."""
+    return Limiter(InMemoryBucket([Rate(max(int(limit), 1), Duration.SECOND)]))
 
 
-LIMITERS = {
-    "read": RateLimiter(READS_PER_SECOND),
-    "write": RateLimiter(WRITES_PER_SECOND),
-    # The exchange's balance bucket holds one second of budget: no burst.
-    "balance": RateLimiter(BALANCE_PER_SECOND, capacity=1),
-}
+def build_limiters() -> dict[str, Limiter]:
+    return {
+        "read": per_second(READS_PER_SECOND),
+        "write": per_second(WRITES_PER_SECOND),
+        # The balance endpoint allows one request per second with no burst.
+        "balance": per_second(BALANCE_PER_SECOND),
+    }
+
+
+LIMITERS = build_limiters()
 
 
 def _bucket(method: str, path: str) -> str:
@@ -133,7 +118,7 @@ def _send(method: str, path: str, params: dict | None = None, data: dict | None 
     query = f"?{urlencode(params)}" if params else ""
     attempts = MAX_429_RETRIES + 1 if retry_429 else 1
     for attempt in range(attempts):
-        LIMITERS[_bucket(method, path)].acquire()
+        LIMITERS[_bucket(method, path)].try_acquire("kalshi")
         response = _session.request(
             method, BASE_URL + path + query, headers=kalshi_headers(method, path),
             json=data, timeout=TIMEOUT)

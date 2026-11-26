@@ -1,46 +1,71 @@
-"""Runtime locations and settings, independent of the launch directory.
+"""Runtime settings, independent of the launch directory.
 
-Data defaults to the repository root to preserve the existing JSON files. Tests
-can select an empty data directory and an absent dotenv file before importing.
+Three sources, each for one kind of value:
+
+- Environment (or `.env` in the repository root): credentials and deployment
+  values. `ENV`, the key ID and key file for that exchange, and `KALSHI_DATA_DIR`.
+- `config.json` in the data directory: app settings (see `DEFAULT_SETTINGS`).
+- Constants below: values that should not need changing.
 """
+import json
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-
-def env_flag(name: str, default: bool) -> bool:
-    """Read a true/false environment value; anything other than 'true' is false."""
-    value = os.getenv(name)
-    if value is None or value.strip() == "":
-        return default
-    return value.strip().lower() == "true"
-
-
-def env_list(name: str, default: str) -> list[str]:
-    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
-
-
-def env_float(name: str, default: float) -> float:
-    try:
-        return float(os.getenv(name, default))
-    except ValueError:
-        return default
-
-
-PROJECT_ROOT = Path(os.environ.get("KALSHI_PROJECT_ROOT", Path(__file__).resolve().parents[2]))
-load_dotenv(os.environ.get("KALSHI_ENV_FILE", str(PROJECT_ROOT / ".env")))
-DATA_DIR = Path(os.environ.get("KALSHI_DATA_DIR", PROJECT_ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = PROJECT_ROOT / "static"
+# Tests point this at an absent file so a developer's own .env never applies to them.
+load_dotenv(os.environ.get("KALSHI_ENV_FILE", str(PROJECT_ROOT / ".env")))
+
 ENV = os.getenv("ENV", "DEMO")
-EVENT_TICKER = os.getenv("EVENT_TICKER")
-# Manual + arbitrage simulation. Defaults to simulation when the setting is absent.
-DRY_RUN = env_flag("DRY_RUN", default=True)
+DATA_DIR = Path(os.environ.get("KALSHI_DATA_DIR", PROJECT_ROOT))
+SETTINGS_FILE = DATA_DIR / "config.json"
+
+DEFAULT_SETTINGS = {
+    "event_ticker": None,   # event shown in the live trader
+    "dry_run": True,        # simulate manual and arbitrage orders
+}
+
+
+def load_settings(path: Path) -> dict:
+    """App settings from `path`, with defaults for a missing file or missing keys.
+
+    Dry run stays on unless the file says exactly `"dry_run": false`, so a typo
+    can never turn on live orders. An unreadable file stops startup rather than
+    silently running with defaults.
+    """
+    if not path.exists():
+        return dict(DEFAULT_SETTINGS)
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Could not read {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{path} must contain a JSON object")
+    unknown = set(data) - set(DEFAULT_SETTINGS)
+    if unknown:
+        raise RuntimeError(f"Unknown setting(s) in {path}: {', '.join(sorted(unknown))}")
+    settings = {**DEFAULT_SETTINGS, **data}
+    settings["dry_run"] = settings["dry_run"] is not False
+    return settings
+
+
+_settings = load_settings(SETTINGS_FILE)
+EVENT_TICKER = _settings["event_ticker"]
+DRY_RUN = _settings["dry_run"]
+
+# Environment variables earlier versions read; they are ignored now. Startup warns.
+RETIRED_ENV = [name for name in (
+    "EVENT_TICKER", "DRY_RUN", "KALSHI_ALLOWED_HOSTS", "KALSHI_READS_PER_SECOND",
+    "KALSHI_WRITES_PER_SECOND", "KALSHI_BALANCE_PER_SECOND", "KALSHI_LOG_LEVEL",
+) if os.getenv(name) is not None]
+
 # Host names the browser may use to reach this server (DNS-rebinding protection).
-ALLOWED_HOSTS = env_list("KALSHI_ALLOWED_HOSTS", "localhost,127.0.0.1")
-# Client-side request budgets, kept below Kalshi's Basic tier (20 reads/s, 10 writes/s,
-# balance 1/s with no burst). Raise these only for a higher API tier.
-READS_PER_SECOND = env_float("KALSHI_READS_PER_SECOND", 15.0)
-WRITES_PER_SECOND = env_float("KALSHI_WRITES_PER_SECOND", 8.0)
-BALANCE_PER_SECOND = env_float("KALSHI_BALANCE_PER_SECOND", 1.0)
-LOG_LEVEL = os.getenv("KALSHI_LOG_LEVEL", "INFO").upper()
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+# Client-side request budgets per second, below Kalshi's Basic tier
+# (20 reads, 10 writes, and 1 balance request with no burst).
+READS_PER_SECOND = 15
+WRITES_PER_SECOND = 8
+BALANCE_PER_SECOND = 1
+LOG_LEVEL = "INFO"
